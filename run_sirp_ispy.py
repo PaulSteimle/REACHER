@@ -2,7 +2,7 @@ from SIRP import run_pre_processing_ispy, recentering_bad_pix_correction_ispy, m
 import logging
 import os
 
-setup_logging(log_file='output.log', level=logging.INFO)
+setup_logging(log_file='/home/paulsteimle/code/output.log', level=logging.INFO)
 
 input_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/'
 output_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/ispy_processed_data/'

@@ -1,10 +1,13 @@
+README.md
 setup.py
 SIRP/__init__.py
 SIRP/misc.py
 SIRP/multiprocessing_routines.py
 SIRP/routines.py
 SIRP/sirp.py
+SIRP/sirp_ispy.py
 SIRP.egg-info/PKG-INFO
 SIRP.egg-info/SOURCES.txt
 SIRP.egg-info/dependency_links.txt
 SIRP.egg-info/top_level.txt
+SIRP/irdis_filters/__init__.py

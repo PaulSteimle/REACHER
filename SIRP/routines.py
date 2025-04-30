@@ -18,6 +18,7 @@ from vip_hci.var import fit_2dgaussian, frame_center
 from hciplot import plot_frames
 
 from .misc import sanitize_header, get_file_name
+from .irdis_filters import get_filter_path 
 
 
 
@@ -489,7 +490,7 @@ def get_ratio_for_nd_filter(wave_filter, nd_filter, L_or_R, plot = False):
     if 'DB' in wave_filter:
         wave_filter = wave_filter.replace('DB', 'D')
 
-    trans_profile_file = '/home/pasteimle/code/IRDIS_FILTERS/SPHERE_IRDIS_' + wave_filter + '.dat'
+    trans_profile_file = get_filter_path('SPHERE_IRDIS_' + wave_filter + '.dat')
 
     if np.loadtxt(trans_profile_file).transpose().shape[0] == 3:
         trans_wave, trans1, trans2 = np.loadtxt(trans_profile_file).transpose()
@@ -508,7 +509,7 @@ def get_ratio_for_nd_filter(wave_filter, nd_filter, L_or_R, plot = False):
 
 
     # get the ndfilter:
-    nd_file = '/home/pasteimle/code/IRDIS_FILTERS/SPHERE_CPI_ND.dat'
+    nd_file = get_filter_path('SPHERE_CPI_ND.dat')
     ND_DF = pd.DataFrame(np.loadtxt(nd_file), columns=['wavelength', 'ND0.0','ND1.0','ND2.0','ND3.5'])
 
     nd_wave = ND_DF['wavelength'].values
