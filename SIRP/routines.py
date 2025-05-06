@@ -113,6 +113,67 @@ def correct_for_dark(input_file, output_file, params):
     return
 
 
+
+def make_bad_pix_mask(output_file, obs_night, filter_name, params):
+
+    DARK_DF = params['DARK_DF']
+    obs_run = obs_night[:7]
+    darks = DARK_DF[(DARK_DF['obs_run']== obs_run) & (DARK_DF['filter']== filter_name)]['filepath']
+
+    all_dark_files = []
+    
+    for file in darks:
+        hdul = fits.open(file)
+        cube = hdul[0].data
+
+        for image in cube:
+
+            all_dark_files.append(image)
+        hdul.close()
+
+    all_dark_files = np.array(all_dark_files)
+
+    coef = 5
+
+    sky = np.nanmedian(all_dark_files, axis = 0)
+
+    med = np.nanmedian(sky)
+
+    sigma = 1.4826 * np.nanmedian(np.abs(sky - med))
+    # the 1.4826 converts the Median Absolute Deviation
+    # to the standard deviation for a Normal distribution
+
+    print("Sigma: " + str(sigma) + ", median: " + str(med))
+
+    # Creates a tuple with the x-y positions of the dead pixels
+    deadpix = np.where(sky < med - sigma * coef)
+
+    # Creates a tuple with the x-y positions of the dead pixels
+    hotpix = np.where(sky > med + sigma * coef)
+
+
+    badpix = tuple(np.append(np.array(deadpix), np.array(hotpix), axis=1))
+
+    bpx_mask = np.zeros(sky.shape)
+    for y,x in zip(badpix[0], badpix[1]):
+        bpx_mask[y,x] = 1
+
+    # the SPHERE IRDIS detector has some known badspots, also include them: 
+    circ_mask1 = circular_aperture(bpx_mask, 12, (394, 364))
+    circ_mask2 = circular_aperture(bpx_mask, 6, (311, 1400))
+    
+    bpx_mask[circ_mask1 == 1] = 1
+    bpx_mask[circ_mask2 == 1] = 1
+
+    hdu = fits.PrimaryHDU(data=bpx_mask)
+    hdul = fits.HDUList([hdu])
+
+    hdul.writeto(output_file, overwrite=True)
+
+    return
+
+
+
 def correct_for_dark_ispy(input_file, output_file, params):
     """Correct the science data by subtracting the dark data.
     
@@ -130,7 +191,7 @@ def correct_for_dark_ispy(input_file, output_file, params):
     science_data = hdul[0].data
     science_header = hdul[0].header
 
-    obs_run = input_file.split('.')[1][:7]
+    obs_run = hdul[0].header['DATE'][:7] 
     exp_time = hdul[0].header['EXPTIME']
     filter_name = hdul[0].header['HIERARCH ESO INS COMB IFLT']
 
@@ -138,7 +199,7 @@ def correct_for_dark_ispy(input_file, output_file, params):
 
 
     if len(DARKS) == 0:
-        logging.info("Warning: No matching dark file for exposure time {}.".format(exp_time) )
+        logging.info("Warning: No matching dark file for exposure time {} in obs_run {}.".format(exp_time, obs_run) )
         logging.info("Skipping dark subtraction for {}.".format(os.path.basename(input_file)))
         return
     
@@ -195,7 +256,7 @@ def correct_for_dark_ispy(input_file, output_file, params):
     return
 
 
-def make_master_flat(flat_filepaths, params):
+def make_master_flat(flat_filepaths, params, plot=False):
     """Create a master flat by combining all flat files."""
     
     logging.info("Creating master flat...")
@@ -232,17 +293,17 @@ def make_master_flat(flat_filepaths, params):
     flat_data = np.array(flat_data)   
     master_flat = np.nanmedian(flat_data, axis=0)
 
-    median_of_masterflat_left = np.nanmedian(master_flat[:, 25:1020, 50:935])
-    median_of_masterflat_right = np.nanmedian(master_flat[:, 15:1010, 1080:1965])
+    median_of_masterflat_left = np.nanmedian(master_flat[25:1020, 50:935])
+    median_of_masterflat_right = np.nanmedian(master_flat[15:1010, 1080:1965])
 
     logging.info('median of master flat left {}, right {}'.format(median_of_masterflat_left, median_of_masterflat_right))
 
-    master_flat[:, 25:1020, 50:935] = master_flat[:, 25:1020, 50:935] / median_of_masterflat_left
-    master_flat[:, 15:1010, 1080:19655] = master_flat[:, 15:1010, 1080:1965] / median_of_masterflat_right
+    master_flat[25:1020, 50:935] = master_flat[25:1020, 50:935] / median_of_masterflat_left
+    master_flat[15:1010, 1080:1965] = master_flat[15:1010, 1080:1965] / median_of_masterflat_right
 
-
-    show_img(master_flat, title='Master Flat')
-    plt.savefig('master_flat.png', dpi=200, format='png')
+    if plot:
+        show_img(master_flat, title='Master Flat')
+        plt.savefig('master_flat.png', dpi=200, format='png')
 
     hdu = fits.PrimaryHDU(data=master_flat)
     hdul_masterflat = fits.HDUList([hdu])
@@ -362,6 +423,8 @@ def bad_pixel_correction(input_file, output_file, params):
                                                       sigma_clip=5, num_neig=29, size=9, frame_by_frame=True,
                                                       mad=True, verbose=True, full_output=True, protect_mask= 100, nproc=params['nproc'])
 
+    hdul.close()
+
     hdu = fits.PrimaryHDU(data=cube_sigcorr)
     hdul_badpix_corr = fits.HDUList([hdu])
     hdul_badpix_corr[0].header = hdul[0].header
@@ -377,26 +440,34 @@ def split_file(input_file, left_output_file, right_output_file, params):
 
     logging.info('\t -> working on {} splitting the frames, saves to {} & {}'.format(os.path.basename(input_file), os.path.basename(left_output_file), os.path.basename(right_output_file)))
 
-
-    #input_file = filepath.replace(cat, cat + '_FLAT_CORR')
-
-    #left_side = filepath.replace(cat, cat + '_LEFT')
-    #right_side = filepath.replace(cat, cat + '_RIGHT')
-
     if os.path.exists(left_output_file) and os.path.exists(right_output_file) and not params['overwrite']:
         logging.info('\t -> exists skipping file {}'.format(os.path.basename(input_file)))
         return
 
     hdul = fits.open(input_file)
 
-    left_frame = hdul[0].data[:, 25:1020, 50:935]
-    right_frame = hdul[0].data[:, 15:1010, 1080:1965]
+    bpm_mask_initial = fits.getdata(params['bad_pix_mask_filepath'])
 
-    hdu_left = fits.PrimaryHDU(data=left_frame)
+    data = hdul[0].data
+
+    # cube_sigcorr, bpm_mask = cube_fix_badpix_isolated(data, bpm_mask=bpm_mask_initial, correct_only=True,
+    #                                                 frame_by_frame=False, mad=True, verbose=True, 
+    #                                                 full_output=True, protect_mask=100) 
+
+    left_frame = data[:, 25:1020, 50:935]
+    right_frame = data[:, 15:1010, 1080:1965]
+
+    left_frame_sigcorr, bpm_mask = cube_fix_badpix_isolated(left_frame, bpm_mask=bpm_mask_initial[25:1020, 50:935], correct_only=True,
+                                                frame_by_frame=False, mad=True, verbose=True, full_output=True) 
+    
+    right_frame_sigcorr, bpm_mask = cube_fix_badpix_isolated(right_frame, bpm_mask=bpm_mask_initial[15:1010, 1080:1965], correct_only=True,
+                                            frame_by_frame=False, mad=True, verbose=True, full_output=True) 
+
+    hdu_left = fits.PrimaryHDU(data=left_frame_sigcorr)
     hdul_left = fits.HDUList([hdu_left])
     hdul_left[0].header = hdul[0].header
 
-    hdu_right = fits.PrimaryHDU(data=right_frame)
+    hdu_right = fits.PrimaryHDU(data=right_frame_sigcorr)
     hdul_right = fits.HDUList([hdu_right])
     hdul_right[0].header = hdul[0].header
 
@@ -405,6 +476,7 @@ def split_file(input_file, left_output_file, right_output_file, params):
     
     hdul_left.close()
     hdul_right.close()
+    hdul.close()
     return
 
 
@@ -480,7 +552,8 @@ def prepare_centering(input_files, output_dir):
                                 'y4': [0] * length,
                                 })
 
-    DATAFRAME.to_csv(csv_path, index=False)
+    #DATAFRAME.to_csv(csv_path, index=False)
+    
     return
 
 
@@ -612,6 +685,15 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R, center =
     # then cut out 20 pixels around the central one
     int_centered_image = float_centered_image[int_center_y-20:int_center_y+21, int_center_x-20:int_center_x+21]
 
+    # and make a larger cutout for the background
+    background = float_centered_image.copy()
+    background = background[int_center_y-50:int_center_y+51, int_center_x-50:int_center_x+51]
+    background[30:70,30:70] = np.nan
+
+    med_background = np.nanmedian(background)
+
+    int_centered_image = int_centered_image - med_background
+
     # lastly rescale the flux 
     rescaled_image = int_centered_image * exp_time_ratio / nd_ratio 
 
@@ -689,15 +771,12 @@ def get_center(input_file, center = None, sat_spots = None, plot = False):
     # if the sat_spots are given, we need to take of the same amount that we cut away at the beginning
     else:
          sat_spots_input = [(f[0] -cut_size, f[1] -cut_size) for f in sat_spots]
-    
 
-    show_img(image, minper=0.1, maxper=99.9, xlim=[center[0]-100,center[0]+100], ylim=[center[1]-100,center[1]+100], size = 2,)
-    plt.savefig('test.png')
-    
     logging.info('using satsplots at {}'.format(sat_spots))
     # now comes the recentering, here we do it on the cube
     res = cube_recenter_satspots(data, xy=sat_spots_input, subi_size=21, verbose=False, debug=False, full_output=True, fit_type='gaus')
 
+    plot = False
     if plot: 
         shifted_image = np.nanmedian(res[0], axis = 0)
         shiftxy = (res[1], res[2])
@@ -725,7 +804,7 @@ def get_center(input_file, center = None, sat_spots = None, plot = False):
     return res
 
 
-def make_the_cube(all_science, star_center_file, output_file_cube, output_file_angs, plot = False):
+def make_the_cube(all_science, star_center_file, output_file_cube, output_file_angs, params, plot = False):
 
     cube = []
     angs = []
@@ -750,7 +829,7 @@ def make_the_cube(all_science, star_center_file, output_file_cube, output_file_a
         for ang, image in zip(angs_i, data): 
             
             # subtract the mmedian skybkg 
-            median_sky_bkg = np.median(image)
+            median_sky_bkg = np.nanmedian(image)
             image = image - median_sky_bkg
 
             cube.append(image)
@@ -775,15 +854,14 @@ def make_the_cube(all_science, star_center_file, output_file_cube, output_file_a
     float_center_x = center_shiftx - int_shift_x
     float_center_y = center_shifty - int_shift_y
 
-    # first shift the center to a full pixel
-    float_centered_cube = cube_shift(cube, float_center_y, float_center_x, imlib='ndimage-interp', interpolation='biquintic')
+    # first shift the center of the cube by the full integer number
 
     cube_center = frame_center(cube[0])
 
     y_size_cube = cube.shape[1]
     x_size_cube = cube.shape[2]
 
-    expanded_cube = np.zeros((len(cube),1025,1025)) * np.nan
+    expanded_cube = np.zeros((len(cube),1025,1025))
     center_expanded_cube = frame_center(expanded_cube[0])
 
     diff_y = (expanded_cube.shape[1] - y_size_cube)/2
@@ -791,31 +869,48 @@ def make_the_cube(all_science, star_center_file, output_file_cube, output_file_a
     
     expanded_cube[:,
                   int(diff_y + int_shift_y) : int(-diff_y + int_shift_y),
-                  int(diff_x + int_shift_x) : int(-diff_x + int_shift_x)] = float_centered_cube
+                  int(diff_x + int_shift_x) : int(-diff_x + int_shift_x)] = cube
+
+    nan_mask = np.zeros((1025,1025)) * np.nan
+    nan_mask[int(diff_y + int_shift_y) : int(-diff_y + int_shift_y),
+             int(diff_x + int_shift_x) : int(-diff_x + int_shift_x)] = 1  
+    
+    mask = circular_aperture(nan_mask, 520, inverted=False)
+    nan_mask[mask == 0] = np.nan
+
+    # make the bad pixel correction
+    # correct the individual frames for bad pixels, e.g. cosmic rays, should be not needed for ADI 
+    # cube_sigcorr_indv, bpm_mask_tmp = cube_fix_badpix_isolated(expanded_cube,
+    #                                                   sigma_clip=5, num_neig=29, size=9, frame_by_frame=True,
+    #                                                   mad=True, verbose=True, full_output=True, protect_mask=100, nproc=params['nproc'])
+
+    cube_sigcorr_indv = expanded_cube.copy()
+
+    # now shift the center to a full pixel
+    float_centered_cube = cube_shift(np.nan_to_num(cube_sigcorr_indv), float_center_y, float_center_x, imlib='ndimage-interp', interpolation='biquintic')
 
 
+    masked_cube = float_centered_cube * nan_mask
+    
     cube_shifted = cube_shift(cube, center_shifty, center_shiftx, imlib='ndimage-interp', interpolation='biquintic')
-    
-    
     # now save the cube
     hdu = fits.PrimaryHDU(data=cube_shifted)
     hdul = fits.HDUList([hdu])
     header = fits.getheader(all_science[0])
 
     for i, file in enumerate(all_science):
-        header['SCIENC{}'.format(i)] = os.path.basename(file)
+        header['SCIEN{}'.format(i)] = os.path.basename(file)
 
     header['CENTSTAR'] = os.path.basename(star_center_file)
     header['SHIFTX'] = np.mean(center_shiftx)
     header['SHIFTY'] = np.mean(center_shifty)
 
     hdul[0].header = header
-
-    hdul.writeto(output_file_cube, overwrite=True)
-    
+    hdul.writeto(output_file_cube.replace('cube', 'cube_basic_shift'), overwrite=True)
+    hdul.close()
 
     # now save the cube
-    hdu2 = fits.PrimaryHDU(data=expanded_cube)
+    hdu2 = fits.PrimaryHDU(data=masked_cube)
     hdul2 = fits.HDUList([hdu2])
     header2 = fits.getheader(all_science[0])
 
@@ -828,17 +923,21 @@ def make_the_cube(all_science, star_center_file, output_file_cube, output_file_a
 
     hdul2[0].header = header2
 
-    hdul2.writeto(output_file_cube.replace('cube', 'cube_partcentered.fits'), overwrite=True)
-    
+    hdul2.writeto(output_file_cube, overwrite=True)
+    hdul2.close()
     np.savetxt(output_file_angs, angs, fmt='%f')
 
+    # optional to save the mask 
+    # hdu_mask = fits.PrimaryHDU(data=nan_mask)
+    # hdul_mask = fits.HDUList([hdu_mask])
+    # hdul_mask.writeto(output_file_cube.replace('cube', 'nan_mask'), overwrite=True)
+    # hdul_mask.close()
 
     return 
 
 
 def make_cube_quadratic(input_file, output_file, params):
     """
-    
     
     """
 

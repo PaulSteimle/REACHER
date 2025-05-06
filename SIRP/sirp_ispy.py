@@ -12,6 +12,41 @@ from .misc import FILEHANDLER,  make_dark_DF, make_flat_DF
 import shutil
 
 
+def make_bad_pix_masks(input_folder, output_folder, nproc = None, overwrite=True):
+
+    bad_pix_mask_folder = os.path.join(output_folder, 'bad_pix_masks')
+
+    logging.info('making DataFrames')
+    DARK_DF = make_dark_DF(input_folder)
+
+    params = {'main_output_folder': output_folder,
+            'input_folder': input_folder,
+            'nproc': nproc,
+            'overwrite': overwrite,
+            'DARK_DF':DARK_DF,
+            }
+
+
+    if not os.path.exists(bad_pix_mask_folder):
+        os.makedirs(bad_pix_mask_folder)
+
+    star_parent_dir = os.path.join(input_folder, 'DARK', 'IRDIS')
+    all_obs_nights = os.listdir(star_parent_dir)
+    for obs_night in all_obs_nights:
+        obs_night_parent_dir = join(star_parent_dir,obs_night)
+        obs_run = obs_night[:-3]
+        filters = os.listdir(obs_night_parent_dir)
+
+        for filter_name in filters:
+
+            # create the bad_pix_mask
+            bad_pix_mask_filepath = os.path.join(bad_pix_mask_folder, 'bad_pix_mask_{}_{}.fits'.format(obs_night, filter_name) )
+            params['bad_pix_mask_filepath'] = bad_pix_mask_filepath
+            routines.make_bad_pix_mask(bad_pix_mask_filepath, obs_night, filter_name, params)
+
+    return
+
+
 def make_all_masterflats(input_folder, output_folder, nproc = None, overwrite=True, skip_bad_pix = False):
     
     star_output_folder = os.path.join(output_folder, 'FLAT')
@@ -29,8 +64,8 @@ def make_all_masterflats(input_folder, output_folder, nproc = None, overwrite=Tr
     stage_output_folder = os.path.join(star_output_folder, 'stage1')
     
     logging.info('making DataFrames')
-    DARK_DF = make_dark_DF('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/')
-    FLAT_DF = make_flat_DF('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/')
+    DARK_DF = make_dark_DF(input_folder)
+    FLAT_DF = make_flat_DF(input_folder)
 
     params = {'main_output_folder': output_folder,
             'output_folder': stage_output_folder,
@@ -42,16 +77,17 @@ def make_all_masterflats(input_folder, output_folder, nproc = None, overwrite=Tr
             }
 
     logging.info('dark correcting all flat files:')
-    star_parent_dir = os.path.join('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/', 'FLAT', 'IRDIS')
+    star_parent_dir = os.path.join(input_folder, 'FLAT', 'IRDIS')
     all_obs_nights = os.listdir(star_parent_dir)
     for obs_night in all_obs_nights:
         obs_night_parent_dir = join(star_parent_dir,obs_night)
+        obs_run = obs_night[:-3]
         filters = os.listdir(obs_night_parent_dir)
 
         for filter_name in filters:
 
             flats = FLAT_DF[(FLAT_DF['obs_night']== obs_night) & (FLAT_DF['filter']== filter_name)]['filepath']
-            darks = DARK_DF[(DARK_DF['obs_night']== obs_night) & (DARK_DF['filter']== filter_name)]['filepath']
+            darks = DARK_DF[(DARK_DF['obs_run']== obs_run) & (DARK_DF['filter']== filter_name)]['filepath']
 
 
             logging.info('all input files for obs night {}:'.format(obs_night))
@@ -73,7 +109,6 @@ def make_all_masterflats(input_folder, output_folder, nproc = None, overwrite=Tr
 
 
     # delete the flats that were not processed from the file handler
-
     logging.info('Correcting for bad pixels. Files are processed in parallel.')
     all_dark_corr_flats = glob(output_folder + 'DARK_CORR/FLAT_DARK_CORR*.fits')
     all_dark_corr_flats.sort()
@@ -124,7 +159,11 @@ def make_all_masterflats(input_folder, output_folder, nproc = None, overwrite=Tr
 
 def run_pre_processing_ispy(input_folder, star, obs_night, filter_name, output_folder, nproc = None, overwrite=True):
 
+    logging.info('working on {}, {}, {}'.format(star, obs_night, filter_name))
+
     star_output_folder = os.path.join(output_folder, star, 'IRDIS', obs_night, filter_name)
+
+    obs_run = obs_night[:-3]
 
     master_flat_folder = os.path.join(output_folder, 'master_flat')
 
@@ -137,20 +176,17 @@ def run_pre_processing_ispy(input_folder, star, obs_night, filter_name, output_f
               'output_folder': stage_output_folder,
               'input_folder': input_folder,
               'star': star,
+              'obs_run': obs_night[:-3],
               'obs_night': obs_night,
               'filter': filter_name,
               'nproc': nproc,
               'overwrite': overwrite}
 
+    DARK_DF = make_dark_DF(input_folder)
+    FLAT_DF = make_flat_DF(input_folder)
 
-    DARK_folder = os.path.join('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/', 'DARK', 'IRDIS', obs_night, filter_name)
-    FLAT_folder = os.path.join('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/', 'FLAT', 'IRDIS', obs_night, filter_name)
-
-    DARK_DF = make_dark_DF('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/')
-    FLAT_DF = make_flat_DF('/data/beegfs/astro-storage/groups/beuther/pasteimle/all_raw_data/')
-
-    flats = FLAT_DF[(FLAT_DF['obs_night']== obs_night) & (FLAT_DF['filter']== filter_name)]['filename']
-    darks = DARK_DF[(DARK_DF['obs_night']== obs_night) & (DARK_DF['filter']== filter_name)]['filename']
+    flats = FLAT_DF[(FLAT_DF['obs_run']== obs_run) & (FLAT_DF['filter']== filter_name)]['filename']
+    darks = DARK_DF[(DARK_DF['obs_run']== obs_run) & (DARK_DF['filter']== filter_name)]['filename']
 
     file_handler = FILEHANDLER()
     file_handler.read_directory_ispy(input_folder, flats, darks)
@@ -177,15 +213,17 @@ def run_pre_processing_ispy(input_folder, star, obs_night, filter_name, output_f
     # check if the processed data directory exists, if not create it
     if not os.path.exists(stage_output_folder):
         os.makedirs(stage_output_folder)
+
+    bad_pix_mask_folder = os.path.join(output_folder, 'bad_pix_masks')
+    bad_pix_mask_filepath = os.path.join(bad_pix_mask_folder, 'bad_pix_mask_{}_{}.fits'.format(obs_night, filter_name) )
+    params['bad_pix_mask_filepath'] = bad_pix_mask_filepath
     
     # Now correct for darks
     logging.info('Correcting for dark current. Files are processed in parallel.')
 
-    # define input and output filepths
+    # define input and output filepaths and run dark correction 
     raw_files = file_handler.get_files(['flux','star_center','science'], None, input_folder) 
-                
     dark_corrected_files = file_handler.get_files(['flux','star_center','science'], 'DARK_CORR', stage_output_folder)   
-
     _ = correct_darks_ispy_multiprocessing(raw_files, dark_corrected_files, params)
 
     # delete the flats that were not processed from the file handler
@@ -244,6 +282,8 @@ def run_pre_processing_ispy(input_folder, star, obs_night, filter_name, output_f
       
 def recentering_bad_pix_correction_ispy(input_folder, star, obs_night, filter_name, output_folder, nproc = None, overwrite=True, skip_bad_pix=False): 
 
+    logging.info('working on {}, {}, {}'.format(star, obs_night, filter_name))
+    
     if output_folder is None:
         output_folder = input_folder.replace('stage1', 'stage2')
 
@@ -257,11 +297,23 @@ def recentering_bad_pix_correction_ispy(input_folder, star, obs_night, filter_na
     file_handler = FILEHANDLER()
     file_handler.read_directory_ispy(input_folder, None, None)
 
+    if len(file_handler.star_center) == 0:
+        logging.info('no starcenter files, is prob a ref star')
+
+        # need to find the star_center files that are used for these targets
+
+
+        return
+    
+    bad_pix_mask_folder = os.path.join(output_folder, 'bad_pix_masks')
+    bad_pix_mask_filepath = os.path.join(bad_pix_mask_folder, 'bad_pix_mask_{}_{}.fits'.format(obs_night, filter_name) )
+
     params = {'main_output_folder': output_folder,
               'output_folder': stage_output_folder,
               'input_folder': input_folder,
               'nproc': nproc,
-              'overwrite': overwrite}
+              'overwrite': overwrite,
+              'bad_pix_mask_filepath':bad_pix_mask_filepath}
 
     if not os.path.exists(stage_output_folder):
         os.makedirs(stage_output_folder)
@@ -278,7 +330,7 @@ def recentering_bad_pix_correction_ispy(input_folder, star, obs_night, filter_na
     logging.info('creating flux files')
     for L_or_R in ['LEFT','RIGHT']:
 
-        stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower())
+        stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower(), 'raw_files')
 
         input_files = file_handler.get_files('flux', L_or_R, stage1_output_folder)
 
@@ -299,35 +351,35 @@ def recentering_bad_pix_correction_ispy(input_folder, star, obs_night, filter_na
     
     for L_or_R in ['LEFT','RIGHT']:
         
-        stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower())
+        stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower(), 'raw_files')
         input_files = file_handler.get_files('science', L_or_R, stage1_output_folder)
         star_center_files = file_handler.get_files('star_center', L_or_R, stage1_output_folder)
-        centered_cube = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube.fits')
+        centered_cube = os.path.join(stage3_output_folder, L_or_R.lower() + '_master_cube_PCA.fits')
         output_angs = os.path.join(stage3_output_folder, L_or_R.lower() + '_parallactic_angles.txt')
 
-        routines.make_the_cube(input_files, star_center_files[0], centered_cube, output_angs, plot = True)
+        routines.make_the_cube(input_files, star_center_files[0], centered_cube, output_angs, params, plot = True)
 
-    logging.info('Finished making the cubes, now comes the bad pixel removal part:')
+    logging.info('Finished making the cubes')
 
     # lastly do the bad pix correction for flux and science files
     # for now only science files as flux seems good
 
-    if not skip_bad_pix:
-        for L_or_R in ['LEFT','RIGHT']:
-            centered_cube = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube.fits')
-            bad_pix_corr_cube = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_bad_pix_corr.fits')
-            routines.bad_pixel_correction(centered_cube, bad_pix_corr_cube, params)
+    # if not skip_bad_pix:
+    #     for L_or_R in ['LEFT','RIGHT']:
+    #         centered_cube = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube.fits')
+    #         bad_pix_corr_cube = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_bad_pix_corr.fits')
+    #         routines.bad_pixel_correction(centered_cube, bad_pix_corr_cube, params)
 
-    # and make the cubes quadratic
-    for L_or_R in ['LEFT','RIGHT']:
+    # # and make the cubes quadratic
+    # for L_or_R in ['LEFT','RIGHT']:
 
-        stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower())
-        if skip_bad_pix:
-            bad_pix_corr_cubes = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_corr.fits')
-        else:
-            bad_pix_corr_cubes = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_bad_pix_corr.fits')
-        output_cubes = os.path.join(stage3_output_folder, L_or_R.lower() + '_mastercube.fits')
-        routines.make_cube_quadratic(bad_pix_corr_cubes, output_cubes, params)
+    #     stage3_output_folder = os.path.join(star_output_folder, L_or_R.lower())
+    #     if skip_bad_pix:
+    #         bad_pix_corr_cubes = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_corr.fits')
+    #     else:
+    #         bad_pix_corr_cubes = os.path.join(stage_output_folder, L_or_R.lower() + '_centered_cube_bad_pix_corr.fits')
+    #     output_cubes = os.path.join(stage3_output_folder, L_or_R.lower() + '_mastercube.fits')
+    #     routines.make_cube_quadratic(bad_pix_corr_cubes, output_cubes, params)
 
     logging.info('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!') 
     logging.info('!!!!!!!!!!!!!!SUCCESFULLY FINISHED!!!!!!!!!!!!!!!!!!!!!!!')
