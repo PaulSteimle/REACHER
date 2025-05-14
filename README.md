@@ -29,14 +29,14 @@ This pipeline takes users from raw archive data to science-ready results, integr
 
 ## 📥 Input Data
 
-The pipeline is designed to work with **raw SPHERE/IRDIS FITS files** from the **ESO Archive**. You'll need to manually download the science and calibration data for your target of interest.
+The pipeline is designed to work with **raw SPHERE/IRDIS .fits files** from the **ESO Archive**. You'll need to manually download the science and calibration data for your target of interest.
 
 ## 🚀 Getting Started
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/hci-reduction-pipeline.git
+git clone https://github.com/PaulSteimle/SIRP.git
 cd hci-reduction-pipeline
 ````
 
