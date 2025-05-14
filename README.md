@@ -37,7 +37,7 @@ The pipeline is designed to work with **raw SPHERE/IRDIS .fits files** from the 
 
 ```bash
 git clone https://github.com/PaulSteimle/SIRP.git
-cd hci-reduction-pipeline
+cd SIRP
 ````
 
 ### 2. Set Up the Environment
