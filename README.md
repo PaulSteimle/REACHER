@@ -54,16 +54,19 @@ pip install -r requirements.txt
 ### 3. Prepare Your Data
 
 Place your raw science and calibration files in the data/ directory. The folder structure should follow:
-
 data/
 ├── science/
-    ├── IRDIS/obs_night/filter/ 
+│   └── IRDIS/
+│       └── obs_night/
+│           └── filter/
 ├── darks/
-    ├── IRDIS/obs_night/filter/
+│   └── IRDIS/
+│       └── obs_night/
+│           └── filter/
 ├── flats/
-    ├── IRDIS/obs_night/filter/
-
-
+│   └── IRDIS/
+│       └── obs_night/
+│           └── filter/
 
 
 ### 4. Run the Pipeline
