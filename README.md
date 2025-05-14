@@ -1,5 +1,4 @@
-# SIRP
-# VLT SPHERE/IRDIS Reduction Pipeline
+# SIRP - VLT SPHERE/IRDIS Reduction Pipeline
 
 A Python-based pipeline for the preprocessing and analysis of high-contrast imaging (HCI) data from **VLT SPHERE/IRDIS**, designed to facilitate the **detection of circumstellar disks and exoplanets**.
 This pipeline takes users from raw archive data to science-ready results, integrating seamlessly with the [VIP HCI](https://github.com/vortex-exoplanet/VIP) package for advanced post-processing.
