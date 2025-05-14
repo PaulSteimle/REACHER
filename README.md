@@ -5,15 +5,19 @@ This pipeline takes users from raw archive data to science-ready results, integr
 
 ## ✨ Features
 
-- Preprocessing of raw SPHERE/IRDIS frames (flat, dark, background subtraction, etc.)
-- Frame registration and centering
-- Temporal filtering and derotation
-- Ready integration with VIP for:
+- Preprocessing of raw SPHERE/IRDIS frames
+  - Flat, Dark, Background, etc., correction 
+  - Frame registration and centering
+  - Parallactic angle extraction for each frame 
+  - Temporal filtering and derotation
+    
+- Ready postprocessing integration with VIP for:
   - PSF subtraction
-  - Disk enhancement
+  - Circumstellar disk detection
   - Exoplanet detection
+  - Exoplanet Astrometry & Photometry using negative injected signals
 
-## 🧰 Technologies
+## 🧰 Used Software
 
 - Python 3.8
 - [VIP HCI](https://github.com/vortex-exoplanet/VIP)
@@ -51,12 +55,14 @@ pip install -r requirements.txt
 
 Place your raw science and calibration files in the data/ directory. The folder structure should follow:
 
-
 data/
 ├── science/
+    ├── IRDIS/obs_night/filter/ 
 ├── darks/
+    ├── IRDIS/obs_night/filter/
 ├── flats/
-└── backgrounds/
+    ├── IRDIS/obs_night/filter/
+
 
 
 
