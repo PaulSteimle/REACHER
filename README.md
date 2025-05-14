@@ -54,6 +54,8 @@ pip install -r requirements.txt
 ### 3. Prepare Your Data
 
 Place your raw science and calibration files in the data/ directory. The folder structure should follow:
+
+
 data/
 ├── science/
 │   └── IRDIS/
