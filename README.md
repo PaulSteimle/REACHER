@@ -78,7 +78,7 @@ data/
 Start the reduction process with:
 
 ```python
-python run_pipeline.py --config config.yaml
+python run_sirp.py
 ```
 
 Make sure to configure your reduction settings in the provided config.yaml.
