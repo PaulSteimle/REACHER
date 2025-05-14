@@ -55,7 +55,7 @@ pip install -r requirements.txt
 
 Place your raw science and calibration files in the data/ directory. The folder structure should follow:
 
-
+```css
 data/
 ├── science/
 │   └── IRDIS/
@@ -70,6 +70,8 @@ data/
 │       └── obs_night/
 │           └── filter/
 
+
+```
 
 ### 4. Run the Pipeline
 
