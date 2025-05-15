@@ -15,7 +15,7 @@ This pipeline takes users from raw archive data to science-ready results, integr
   - PSF subtraction
   - Circumstellar disk detection
   - Exoplanet detection
-  - Exoplanet Astrometry & Photometry using negative injected signals
+  - Exoplanet Astrometry & Photometry using negative injection recovery
 
 ## 🧰 Used Software
 
