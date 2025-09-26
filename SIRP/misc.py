@@ -274,17 +274,17 @@ def find_calib_files(STAR_DF, params):
     return STAR_DF
 
 
-def grab_all_files(input_folder, stars):
+def grab_all_files(params, stars):
 
-    all_recentering_pngs = [f for f in glob(input_folder +'/*/*/*/*/*/*/*.png') if f.split('/')[-7] in stars]
-    all_center_csvs = [f for f in glob(input_folder +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
+    all_recentering_pngs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*/*.png') if f.split('/')[-7] in stars]
+    all_center_csvs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
 
-    output_folder = os.path.join(input_folder, 'recentering')
+    output_folder = params.recentering_folder
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    basefolder_name = os.path.basename(input_folder)
+    basefolder_name = os.path.basename(params.raw_input_dir)
 
     for file in all_recentering_pngs:
 
@@ -315,12 +315,12 @@ def grab_all_files(input_folder, stars):
     return
 
 
-def return_csv_files(input_folder, stars):
-    all_center_csvs = [f for f in glob(input_folder +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
+def return_csv_files(params, stars):
+    all_center_csvs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
 
-    output_folder = os.path.join(input_folder, 'recentering')
+    output_folder = params.recentering_folder
 
-    basefolder_name = os.path.basename(input_folder)
+    basefolder_name = os.path.basename(params.raw_input_dir)
 
     for file in all_center_csvs:
 

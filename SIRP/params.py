@@ -76,10 +76,19 @@ class Parameters:
         self.skip_dither_correction = False
         self.subtract_median_science_sky_bkg = False
 
+        # 
+        self.flux_cut_out_size = 41
+        self.star_loc = (401, 466)  # expected star location (x, y) in the flux image, used for the cut out and gauss fit 
+
+        self.full_output = True  # if True, save additioal cube to check for centering and bad pixel correction
+
 
         # telescope and instrument params
         self.sphere_offset = 135.99 # PA angles offset in degrees, from SPHERE manual
 
+        #  
+        self.clean_stage_1_and_2 = False
+        self.clean_calibrations = False
 
     def get_dataframes(self):
         
@@ -92,12 +101,20 @@ class Parameters:
         self.STAR_DF = make_star_DF(self.raw_input_dir, self.star_name, self.obs_night, self.filter_name)
 
     @property
+    def recentering_folder(self):
+        return os.path.join(self.raw_input_dir, 'recentering')
+
+    @property
     def master_flat_folder(self):
         return os.path.join(self.reduced_output_dir, 'master_flat')
 
     @property
     def master_dark_folder(self):
         return os.path.join(self.reduced_output_dir, 'master_dark')
+    
+    @property
+    def master_background_folder(self):
+        return os.path.join(self.reduced_output_dir, 'master_background')
 
     @property
     def bad_pix_mask_folder(self):
