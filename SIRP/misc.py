@@ -5,142 +5,10 @@ import sys
 
 from astropy.io import fits
 import pandas as pd
-from os.path import basename
+from os.path import basename, join
 import numpy as np
+from shutil import copy2
 from glob import glob 
-
-def get_file_name(filepath):
-    """Get the file name from the full file path."""
-    return os.path.basename(filepath).split('_SPHER')[0]
-
-
-class FILEHANDLER():
-
-    def __init__(self):
-        pass
-
-    def read_directory(self, input_dir):
-        """Read the directory and return all files."""
-
-        self.main_dir = input_dir
-
-        self.all_files = glob(self.main_dir + '*.fits')
-        self.all_files.sort()
-
-        # self.input_flat = [f for f in self.all_files if 'FLAT' in os.path.basename(f) and '2023-07-24' in os.path.basename(f)]
-        # self.input_science = [f for f in self.all_files if 'SCIENCE' in os.path.basename(f)]
-        # self.input_flux = [f for f in self.all_files if 'FLUX' in os.path.basename(f)]
-        # self.input_dark = [f for f in self.all_files if 'DARK' in os.path.basename(f)]
-        # self.input_star_center = [f for f in self.all_files if 'STAR_CENTER' in os.path.basename(f)]
-
-        self.flat = [os.path.basename(f) for f in self.all_files if 'FLAT' in os.path.basename(f) and '2023-07-24' in os.path.basename(f)]
-        self.science = [os.path.basename(f) for f in self.all_files if 'SCIENCE' in os.path.basename(f)]
-        self.flux = [os.path.basename(f) for f in self.all_files if 'FLUX' in os.path.basename(f)]
-        self.dark = [os.path.basename(f) for f in self.all_files if 'DARK' in os.path.basename(f)]
-        self.star_center = [os.path.basename(f) for f in self.all_files if 'STAR_CENTER' in os.path.basename(f)]
-
-        self.flat.sort()
-        self.science.sort()
-        self.flux.sort()
-        self.dark.sort()
-        self.star_center.sort()
-
-        return
-
-    def read_directory_ispy(self, science_dir, flats, darks):
-        """Read the directory and return all files."""
-
-        self.all_files = glob(science_dir + '*.fits')
-        self.all_files.sort()
-
-
-        self.science = [os.path.basename(f) for f in self.all_files if 'SCIENCE' in os.path.basename(f)]
-        self.flux = [os.path.basename(f) for f in self.all_files if 'FLUX' in os.path.basename(f)]
-        self.star_center = [os.path.basename(f) for f in self.all_files if 'STAR_CENTER' in os.path.basename(f)]
-        self.flux.sort()
-        self.science.sort()
-        self.star_center.sort()
-
-        if flats is not None:
-            self.flat = [os.path.basename(f) for f in flats]
-            self.flat.sort()
-
-        if darks is not None:   
-            self.dark = [os.path.basename(f) for f in darks]
-            self.dark.sort()    
-
-        return
-
-
-    # def update_flats(self, new_flats):
-    #     """Update the flats list with new flats."""
-    #     self.input_flat = new_flats
-    #     self.flat = [os.path.basename(f) for f in new_flats]
-    #     self.output_flat = [os.path.join(self.output_dir, f) for f in self.flat]
-
-    #     self.flat.sort()
-    #     self.output_flat.sort()
-    #     self.input_flat.sort()
-
-    #     return
-
-
-    # def make_output_paths(self):
-
-    #     for filetype in ['flat','science','flux','dark','star_center']:
-    #         setattr(self, 'output_' + filetype, [os.path.join(self.output_dir , f) for f in getattr(self, filetype)])
-    #     return
-
-
-    # def get_raw_input_files(self):
-    #     return (self.input_flat + self.input_flux + self.input_science + self.input_star_center)
-    
-
-    # def get_all_output_files(self):
-    #     return (self.output_flat + self.output_flux + self.output_science + self.output_star_center)
-
-
-    # def get_science_output_files(self):
-    #     return (self.output_flux + self.output_science + self.output_star_center)
-
-
-    def get_files(self, key, stage, output_folder = None):
-
-        # first check what type key is: 
-        if isinstance(key, str):
-            key = [key]
-    
-        if isinstance(key, (np.ndarray, list)):
-            all_output_files = []
-
-            for k in key: 
-                files = getattr(self, k)
-
-                key_output_files = []
-
-                if isinstance(files, str):
-                    files = [files]
-
-                for file in files:
-                    file_type = get_file_name(file)
-
-                    if stage is not None: 
-                        output_file = file.replace(file_type, file_type + '_' + stage)
-                    else: 
-                        output_file = file 
-
-                    if output_folder is not None:
-                        output_file = os.path.join(output_folder, output_file)
-
-                    key_output_files.append(output_file)
-
-                all_output_files += key_output_files
-
-        else: 
-            raise KeyError('')
-                
-        return all_output_files
-            
 
 
 def sanitize_header(header):
@@ -248,6 +116,7 @@ def make_flat_DF(master_dir):
             for file in all_files:
                 filename = basename(file) 
                 exp_time = fits.getheader(file)['EXPTIME']
+                ND_filter = fits.getheader(file)['HIERARCH ESO INS4 FILT2 NAME']
                 
                 DF_i = pd.DataFrame({'filename': [filename], 
                                     'obs_night': [obs_night],
@@ -255,7 +124,7 @@ def make_flat_DF(master_dir):
                                     'filter': [filter_name],
                                     'exp_time': [exp_time], 
                                     'filepath': [file],
-
+                                    'nd_filter': [ND_filter]
                                     })
 
                 FLAT_DF = pd.concat((FLAT_DF, DF_i), ignore_index=True)
@@ -283,6 +152,50 @@ def make_dark_DF(master_dir):
             for file in all_files:
                 filename = basename(file) 
                 exp_time = fits.getheader(file)['EXPTIME']
+                filter = fits.getheader(file)['HIERARCH ESO INS COMB IFLT']
+                ND_filter = fits.getheader(file)['HIERARCH ESO INS4 FILT2 NAME']
+                type = fits.getheader(file)['HIERARCH ESO DPR TYPE']
+
+                if 'BACKGROUND' in type and 'K' in filter:
+                    pass
+                else:
+                    DF_i = pd.DataFrame({'filename': [filename], 
+                                        'obs_night': [obs_night],
+                                        'obs_run': [obs_night[:-3]],
+                                        'filter': [filter_name],
+                                        'exp_time': [exp_time], 
+                                        'filepath': [file],
+                                        'nd_filter': [ND_filter]
+                                        })
+
+                    DARK_DF = pd.concat((DARK_DF, DF_i), ignore_index=True)
+                
+    return DARK_DF
+
+def make_background_DF(master_dir):
+    BACKGROUND_DF = pd.DataFrame()
+
+    star_parent_dir = join(master_dir, 'BACKGROUND', 'IRDIS')
+    if not os.path.exists(star_parent_dir):
+        return BACKGROUND_DF
+    
+    all_obs_nights = os.listdir(star_parent_dir)
+
+    for obs_night in all_obs_nights:
+
+        obs_night_parent_dir = join(star_parent_dir, obs_night)
+        filters = os.listdir(obs_night_parent_dir)
+
+        for filter_name in filters:
+
+            filter_parent_dir = join(obs_night_parent_dir, filter_name)
+
+            all_files = sorted(glob(join(filter_parent_dir, 'BACKGROUND*.fits')))
+
+            for file in all_files:
+                filename = basename(file) 
+                exp_time = fits.getheader(file)['EXPTIME']
+                ND_filter = fits.getheader(file)['HIERARCH ESO INS4 FILT2 NAME']
                 
                 DF_i = pd.DataFrame({'filename': [filename], 
                                     'obs_night': [obs_night],
@@ -290,9 +203,134 @@ def make_dark_DF(master_dir):
                                     'filter': [filter_name],
                                     'exp_time': [exp_time], 
                                     'filepath': [file],
-
+                                    'nd_filter': [ND_filter]
                                     })
 
-                DARK_DF = pd.concat((DARK_DF, DF_i), ignore_index=True)
+                BACKGROUND_DF = pd.concat((BACKGROUND_DF, DF_i), ignore_index=True)
                 
-    return DARK_DF
+    return BACKGROUND_DF
+
+
+
+def make_star_DF(master_dir, star, obs_night, filter_name):
+    STAR_DF = pd.DataFrame()
+
+    filter_parent_dir = join(master_dir, star, 'IRDIS', obs_night, filter_name)
+    all_files = sorted(glob(join(filter_parent_dir, '*SPHER*.fits')))
+
+    for file in all_files:
+        filename = basename(file) 
+
+        header = fits.getheader(file)
+        exp_time = header['EXPTIME']
+        ND_filter = header['HIERARCH ESO INS4 FILT2 NAME']
+        type = header['HIERARCH ESO DPR TYPE']
+        
+        DF_i = pd.DataFrame({'filename': [filename], 
+                            'obs_night': [obs_night],
+                            'obs_run': [obs_night[:-3]],
+                            'filter': [filter_name],
+                            'exp_time': [exp_time], 
+                            'filepath': [file],
+                            'nd_filter': [ND_filter],
+                            'type': [type],
+                            })
+
+        STAR_DF = pd.concat((STAR_DF, DF_i), ignore_index=True)
+                
+    return STAR_DF
+
+
+def find_calib_files(STAR_DF, params):
+
+    for index, row in STAR_DF.iterrows():
+        obs_night = row['obs_night']
+        obs_run = row['obs_run']
+        filter_name = row['filter']
+        exp_time = row['exp_time']
+        nd_filter = row['nd_filter']
+
+        # run through all files and check if they exist 
+        master_dark_filepath = os.path.join(params.master_dark_folder, 'master_dark_{}_{}.fits'.format(obs_run, exp_time))
+        if not os.path.exists(master_dark_filepath):
+            raise FileExistsError('master dark file does not exist: {}'.format(master_dark_filepath))
+        STAR_DF.loc[index, 'master_dark'] = master_dark_filepath
+
+        master_flat_filepath = os.path.join(params.master_flat_folder, 'master_flat_{}_{}.fits'.format(obs_night, filter_name))
+        if not os.path.exists(master_flat_filepath):
+            raise FileExistsError('master flat file does not exist: {}'.format(master_flat_filepath))
+        STAR_DF.loc[index, 'master_flat'] = master_flat_filepath
+
+        # master_bkg_filepath = os.path.join(params.master_background_folder, 'master_background_{}_{}_{}_{}.fits'.format(obs_night, filter_name, exp_time, nd_filter))
+        # if not os.path.exists(master_bkg_filepath):
+        #     raise FileExistsError('master background file does not exist: {}'.format(master_bkg_filepath))
+        # STAR_DF.loc[index, 'master_background'] = master_bkg_filepath
+
+        bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
+        if not os.path.exists(bad_pix_mask_filepath):
+            raise FileExistsError('bad pix mask file does not exist: {}'.format(bad_pix_mask_filepath))
+        STAR_DF.loc[index, 'bad_pix_mask'] = bad_pix_mask_filepath
+
+    return STAR_DF
+
+
+def grab_all_files(input_folder, stars):
+
+    all_recentering_pngs = [f for f in glob(input_folder +'/*/*/*/*/*/*/*.png') if f.split('/')[-7] in stars]
+    all_center_csvs = [f for f in glob(input_folder +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
+
+    output_folder = os.path.join(input_folder, 'recentering')
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    basefolder_name = os.path.basename(input_folder)
+
+    for file in all_recentering_pngs:
+
+        filename = os.path.basename(file)
+        folder_name = file.split('/STAR_CENTER')[0].split(f'/{basefolder_name}/')[1].replace('/','_').replace('_recentering_pngs','')
+        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
+
+        output_folder_star = os.path.join(output_folder, folder_name)
+        if not os.path.exists(output_folder_star):
+            os.makedirs(output_folder_star)
+
+        copy2(file, os.path.join(output_folder, folder_name, filename))
+
+
+    for file in all_center_csvs:
+
+        filename = os.path.basename(file)
+        folder_name = file.split('/centers.csv')[0].split(f'/{basefolder_name}/')[1].replace('/','_')
+        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
+
+
+        if not os.path.exists(os.path.join(output_folder, folder_name)):
+            os.makedirs(os.path.join(output_folder, folder_name))
+
+        copy2(file, os.path.join(output_folder, folder_name, filename))
+
+
+    return
+
+
+def return_csv_files(input_folder, stars):
+    all_center_csvs = [f for f in glob(input_folder +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
+
+    output_folder = os.path.join(input_folder, 'recentering')
+
+    basefolder_name = os.path.basename(input_folder)
+
+    for file in all_center_csvs:
+
+        filename = os.path.basename(file)
+        folder_name = file.split('/centers.csv')[0].split(f'/{basefolder_name}/')[1].replace('/','_')
+        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
+
+        copy2(os.path.join(output_folder, folder_name, filename),file)
+
+    return
+
+
+
