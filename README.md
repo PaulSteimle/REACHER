@@ -122,7 +122,7 @@ VIP HCI for powerful HCI post-processing tools
 
 📬 Contact
 
-For questions or suggestions, feel free to open an issue or contact me via email at your.email@example.com.
+For questions or suggestions, feel free to open an issue or contact me via [email](mailto:pasteimle@mpia.de)
 
 
 
