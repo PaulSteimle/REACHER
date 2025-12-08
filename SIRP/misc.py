@@ -276,59 +276,60 @@ def find_calib_files(STAR_DF, params):
 
 def grab_all_files(params, stars):
 
-    all_recentering_pngs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*/*.png') if f.split('/')[-7] in stars]
-    all_center_csvs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
+    logging.info('Grabbing all files for stars: {}'.format(stars))
+    logging.info('Output folder for recentering files: {}'.format(params.recentering_folder))
 
-    output_folder = params.recentering_folder
+    for star in stars:
+        star_parent_dir = os.path.join(params.reduced_output_dir,star,'IRDIS')
+        all_obs_nights = os.listdir(star_parent_dir)
+        for obs_night in all_obs_nights:
 
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+            obs_night_parent_dir = os.path.join(star_parent_dir,obs_night)
+            filters = os.listdir(obs_night_parent_dir)
 
-    basefolder_name = os.path.basename(params.raw_input_dir)
+            for filter_name in filters:
 
-    for file in all_recentering_pngs:
+                all_recentering_pngs = glob(join(params.reduced_output_dir,'{}/*/*/*/stage2/recentering_pngs/*.png'.format(star))) 
+                center_csv = glob(join(params.reduced_output_dir,'{}/*/*/*/stage2/centers.csv'.format(star)))[0]
 
-        filename = os.path.basename(file)
-        folder_name = file.split('/STAR_CENTER')[0].split(f'/{basefolder_name}/')[1].replace('/','_').replace('_recentering_pngs','')
-        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
+                recentering_star_folder = join(params.recentering_folder, '_'.join([star, obs_night, filter_name]))
+                if not os.path.exists(recentering_star_folder):
+                    os.makedirs(recentering_star_folder)
+            
 
-        output_folder_star = os.path.join(output_folder, folder_name)
-        if not os.path.exists(output_folder_star):
-            os.makedirs(output_folder_star)
+                all_recentering_pngs_new = [join(recentering_star_folder, os.path.basename(f)) for f in all_recentering_pngs]
+                new_center_csv = join(recentering_star_folder, 'centers.csv'.format(star))
 
-        copy2(file, os.path.join(output_folder, folder_name, filename))
-
-
-    for file in all_center_csvs:
-
-        filename = os.path.basename(file)
-        folder_name = file.split('/centers.csv')[0].split(f'/{basefolder_name}/')[1].replace('/','_')
-        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
-
-
-        if not os.path.exists(os.path.join(output_folder, folder_name)):
-            os.makedirs(os.path.join(output_folder, folder_name))
-
-        copy2(file, os.path.join(output_folder, folder_name, filename))
-
-
+                copy2(center_csv, new_center_csv)
+                logging.info('\n')
+                logging.info('\t -> copying {} center.csv'.format(star))
+                for f_old, f_new in zip(all_recentering_pngs, all_recentering_pngs_new):
+                    logging.info('\t -> copying {} to {}'.format(basename(f_old), basename(recentering_star_folder)))
+                    copy2(f_old, f_new)
     return
 
 
 def return_csv_files(params, stars):
-    all_center_csvs = [f for f in glob(params.raw_input_dir +'/*/*/*/*/*/*.csv') if f.split('/')[-6] in stars]
 
-    output_folder = params.recentering_folder
+    logging.info('Re-distributing all centers.csv files for stars: {} \n'.format(stars))
+    for star in stars:
+        star_parent_dir = os.path.join(params.reduced_output_dir,star,'IRDIS')
+        all_obs_nights = os.listdir(star_parent_dir)
+        for obs_night in all_obs_nights:
+            obs_night_parent_dir = os.path.join(star_parent_dir,obs_night)
+            filters = os.listdir(obs_night_parent_dir)
+            for filter_name in filters:
 
-    basefolder_name = os.path.basename(params.raw_input_dir)
+                center_csv = glob(join(params.reduced_output_dir,'{}/*/*/*/stage2/centers.csv'.format(star)))[0]
 
-    for file in all_center_csvs:
+                recentering_star_folder = join(params.recentering_folder, '_'.join([star, obs_night, filter_name]))
+                if not os.path.exists(recentering_star_folder):
+                    os.makedirs(recentering_star_folder)
 
-        filename = os.path.basename(file)
-        folder_name = file.split('/centers.csv')[0].split(f'/{basefolder_name}/')[1].replace('/','_')
-        print('copy', file, 'to', os.path.join(output_folder, folder_name, filename))
+                new_center_csv = join(recentering_star_folder, 'centers.csv'.format(star))
 
-        copy2(os.path.join(output_folder, folder_name, filename),file)
+                copy2(new_center_csv, center_csv)
+                logging.info('\t -> re-copying {}.center csv'.format(star))
 
     return
 

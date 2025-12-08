@@ -253,8 +253,17 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
     if not os.path.exists(params.right_output_folder):
         os.makedirs(params.right_output_folder)
 
+    all_exp_times = params.STAR_DF[params.STAR_DF['type'] == 'OBJECT']['exp_time'].unique()
+    if not len(all_exp_times) == 1:
+
+        csv_filepath = join(params.star_output_folder, 'STAR_DF_{}_{}_{}.csv'.format(params.star_name, params.obs_night, params.filter_name))
+        params.STAR_DF.to_csv(csv_filepath, index=False)
+        raise ValueError('science files have different exposure times: {}.  Check the STAR_DF .csv file {}'.format(all_exp_times, csv_filepath))
+    else:
+        exp_time_science = all_exp_times[0]
+
     # make the almost done Flux files 
-    exp_time_science = wrappers.get_science_exp_time_wrapper(file_handler.get_files('science', None, params.star_input_folder) )
+    # exp_time_science = wrappers.get_science_exp_time_wrapper(file_handler.get_files('science', None, params.star_input_folder) )
 
     for L_or_R in ['LEFT','RIGHT']:
         stage3_output_folder = os.path.join(params.star_output_folder, L_or_R.lower(), 'raw_files')

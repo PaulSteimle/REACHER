@@ -13,9 +13,10 @@ from os.path import join, basename
 
 from scipy import ndimage
 from astropy.io import fits 
+from astropy.time import Time
 from glob import glob 
 
-from vip_hci.preproc import cube_fix_badpix_isolated, cube_recenter_satspots, frame_center_satspots, frame_center_radon, frame_shift, cube_shift, cube_fix_badpix_interp, cube_recenter_dft_upsampling
+from vip_hci.preproc import cube_fix_badpix_isolated, cube_recenter_satspots, frame_center_satspots, frame_px_resampling, frame_shift, cube_shift, cube_fix_badpix_interp, cube_recenter_dft_upsampling
 from vip_hci.var import fit_2dgaussian, frame_center 
 
 from .misc import sanitize_header
@@ -39,8 +40,20 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
     for file in dark_file_list:
         hdul = fits.open(file)
         cube = hdul[0].data
-        for image in cube:
-            all_dark_file_data.append(image)
+        if cube.ndim == 2:
+            if cube.shape[0] == 2048:
+                pass
+            elif cube.shape[1] == 1024:
+                print('adding 2d dark file data', cube.shape)
+                all_dark_file_data.append(cube)
+        elif cube.ndim == 3:
+            
+            if cube.shape[1] == 2048:
+                pass
+            elif cube.shape[1] == 1024:
+                print('adding 3d dark file data', cube.shape)
+                for image in cube:
+                    all_dark_file_data.append(image)
         hdul.close()
 
     all_dark_file_data = np.array(all_dark_file_data)
@@ -426,8 +439,10 @@ def make_master_bkg(bkg_filepaths, params, plot=False):
     return
 
 
-def calibrate_files(input_file, output_file, masterdark_filepath, masterflat_filepath, master_background_filepath, bad_pix_mask_filepath, clump_mask_filepath, overwrite):
+def calibrate_files(input_file, output_file, masterdark_filepath, masterflat_filepath, master_background_filepath, bad_pix_mask_filepath, 
+                    clump_mask_filepath, overwrite):
     """Calibrate the raw files with Masterdark, Masterflat and Masterbackground, if applicable
+        Note this function is excecuted in parallel using multiprocessing so only one input cube is processed at the same time.
     
     """
 
@@ -446,13 +461,15 @@ def calibrate_files(input_file, output_file, masterdark_filepath, masterflat_fil
     science_data = hdul[0].data
 
     calibrated_science_data = (science_data - np.nan_to_num(master_dark))/np.nan_to_num(master_flat)
+
+    # todo : add option to correct for master background which does not seem to work at this moment
     # if master_background is not None:
     #     master_background = fits.getdata(master_background_filepath)
     #     calibrated_science_data = calibrated_science_data - np.nan_to_num(master_background) #/np.nanmedian(master_background)*np.nanmedian(calibrated_science_data))
 
     # correct for the individual bad pixels and for the clumps 
     science_data_clump_corr = correct_bad_pix(calibrated_science_data, bad_pix_mask_filepath, clump_mask_filepath, False) 
-    
+
     # save the intermediate calibrated data 
     hdu = fits.PrimaryHDU(data=science_data_clump_corr)
     hdul_flat_corr = fits.HDUList([hdu])
@@ -533,25 +550,35 @@ def prepare_centering(input_files, output_dir):
             raise ValueError('data shape not recognized: {}'.format(data.shape))        
 
         # find the centers of the frame
-        center = centroid_1dg(image)
+        data_blurred = ndimage.gaussian_filter(image.astype(float), sigma=10)
+
+        center_blurred = centroid_1dg(data_blurred)
+
         cy, cx = frame_center(image)
 
         # and try to use the now centered image with the sattelite spots
-        sat_spots = np.array([ [-35, 35], [35, 35], [-35,-35], [35, -35]]) + center
+        sat_spots = np.array([ [-35, 35], [35, 35], [-35,-35], [35, -35]]) + center_blurred
 
-        show_img(image, minper=0.1, maxper=99.9, title=os.path.basename(file), xlim=(cx-70, cx+70), ylim=(cy-70, cy+70))
+        show_img(image, minper=0.1, maxper=99.9, title=os.path.basename(file), xlim=(cx-70, cx+70), ylim=(cy-70, cy+70), size=5, dpi=120)
 
-        plt.scatter(center[0], center[1], color='black', s=10, label='centroid 1dg', marker = '+')
-        plt.scatter(cx, cy, color='black', s=10, label='center frame', marker = '*')
+        plt.scatter(center_blurred[0], center_blurred[1], color='black', s=200, marker = '+')
+        plt.scatter(cx, cy, color='black', s=200, marker = '*')
 
-        for j, xy in enumerate(sat_spots):
-            plt.scatter(xy[0], xy[1], color=f'C{j}', s=10, label=f'xy {j}')
+        plt.scatter(sat_spots[:,0], sat_spots[:,1], marker='o', color='black', s=400, lw = 2, facecolor='none')
+
+        for i in range(len(sat_spots)):
+            plt.text(sat_spots[i,0]+7, sat_spots[i,1]+7, '{}'.format(i+1), color='black', fontsize=16)
+
+        plt.scatter([], [], color='black', label='center frame', marker = '*')
+        plt.scatter([], [], color='black', label='centr 1D Gauss', marker = '+')
+        plt.scatter([], [], marker='o', color='black', label = 'sat-spots', facecolor='none')
+
         plt.legend()
 
         png_dir = os.path.join(output_dir ,'recentering_pngs')
         if not os.path.exists(png_dir):
             os.makedirs(png_dir)
-        plt.savefig(os.path.join(png_dir, os.path.basename(file)[:-5] +'.png'), dpi = 200, format='png')
+        plt.savefig(os.path.join(png_dir, os.path.basename(file)[:-5] +'.pdf'), dpi = 120, format='pdf', bbox_inches='tight')
         plt.close()
 
 
@@ -598,7 +625,10 @@ def get_science_exp_time(filepaths):
         if exp_time not in all_exp_times:
             all_exp_times.append(exp_time)
 
+
     if len(all_exp_times) != 1:
+
+        np.savetxt('all_exp_times.txt', (all_exp_times, [basename(f) for f in filepaths]), fmt='%1.5f')
         raise ValueError('several exposure times in timeseries: {}'.format(all_exp_times) )
 
     return all_exp_times[0]
@@ -654,7 +684,7 @@ def get_ratio_for_nd_filter(wave_filter, nd_filter, L_or_R, make_plots):
     trans_wave_B_cut = trans_wave[mask_B]
     trans_cut = trans[mask_B]
 
-    convoluted_trans = nd_trans_cut #trans_cut
+    convoluted_trans = nd_trans_cut * trans_cut
 
 
     # as the profile is sampled by 1 Angstrom, the integral is simply the sum of the transmission
@@ -677,7 +707,10 @@ def get_ratio_for_nd_filter(wave_filter, nd_filter, L_or_R, make_plots):
     return ratio
 
 
-def create_flux_file(input_file, output_file, science_exp_time, L_or_R, overwrite, image_shift_library, image_shift_interpolation, make_plots, cut_out_size, star_loc):
+def create_flux_file(input_file, output_file, science_exp_time, L_or_R, 
+                     sky_files_exist, master_sky_filepath, overwrite, 
+                     image_shift_library, image_shift_interpolation, make_plots, 
+                     cut_out_size, star_loc, save_fullsize_flux):
 
     logging.info('\t -> working on {}, will be saved as {}'.format(os.path.basename(input_file), os.path.basename(output_file)))
 
@@ -689,6 +722,7 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R, overwrit
     data = hdul[0].data
     header = hdul[0].header
     exp_time = header['EXPTIME']
+    temp = header['HIERARCH ESO INS4 TEMP449 VAL']
     nd_filter = header['HIERARCH ESO INS4 FILT2 ID']
     wave_filter = header['HIERARCH ESO INS COMB IFLT']
     hdul.close()
@@ -703,6 +737,17 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R, overwrit
 
     # now stack the exposures in a median file toegther to reduce noise
     stacked_flux_image = np.nanmedian(np.nan_to_num(data), axis = 0)
+
+    if sky_files_exist:
+        try: 
+            master_sky = fits.getdata(master_sky_filepath)
+            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
+            master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
+        except Exception as e:
+            print('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
+            raise ValueError(e)
+
+        stacked_flux_image = stacked_flux_image - master_sky * temp/mean_sky_filter_temp * exp_time/master_sky_exptime
 
     if len(stacked_flux_image)%2 == 1:
         cropsize = 31
@@ -787,6 +832,14 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R, overwrit
     hdul_flux.writeto(output_file, overwrite=True)
     hdul_flux.close()
 
+    if save_fullsize_flux:
+        fullsize_output_file = output_file.replace('.fits', '_fullsize.fits')
+        hdu_fullsize_flux = fits.PrimaryHDU(data=stacked_flux_image * exp_time_ratio / nd_ratio)
+        hdul_fullsize_flux = fits.HDUList([hdu_fullsize_flux])
+        hdul_fullsize_flux[0].header = header
+        hdul_fullsize_flux.writeto(fullsize_output_file, overwrite=True)
+        hdul_fullsize_flux.close()
+
     return
 
 
@@ -798,6 +851,7 @@ def get_satspots(input_file):
 
     filename = os.path.basename(input_file)
     DF_Frame = DF[DF['frames'] == filename]
+    
     centers = [ (DF_Frame['x{}'.format(f+1)].values[0], DF_Frame['y{}'.format(f+1)].values[0]) for f in range(4)]
         
     return centers
@@ -820,7 +874,8 @@ def get_center(input_file, make_plots, center = None):
 
     # try to find the center using centroid_1dg
     if center is None:
-        center = centroid_1dg(image)
+        data_blurred = ndimage.gaussian_filter(image.astype(float), sigma=10)
+        center = centroid_1dg(data_blurred)
 
     # find the center of the frame
     cy, cx = frame_center(image)
@@ -858,14 +913,14 @@ def get_center(input_file, make_plots, center = None):
         for j, xy in enumerate(sat_spots_input):
             plt.scatter(xy[0], xy[1], color=f'C{j}', s=10, label=f'xy {j}')
         plt.legend()
-        plt.savefig('test.png')
+        #plt.savefig('test.png')
         plt.close()
 
         # the shifted image with centers
         show_img(shifted_image, minper=0.1, maxper=99.9, xlim=[cx-100,cx+100], ylim=[cy-100,cy+100], size = 2)
         plt.scatter(cx, cy, color='black', s=10, label='center frame', marker = '+')
         plt.legend()
-        plt.savefig('test.png')
+        #plt.savefig('test.png')
         plt.close()
 
     
@@ -892,8 +947,11 @@ def make_mastersky(sky_files_list, master_sky_filepath, owerwrite):
     #check for sky data 
     sky_data = []
     sky_temps = []
+    sky_header = None
     for file in sky_files_list:
         hdul_sky = fits.open(file)
+        if sky_header is None:
+            sky_header = hdul_sky[0].header
         sky_temps.append(hdul_sky[0].header['HIERARCH ESO INS4 TEMP449 VAL'])
 
         if hdul_sky[0].data.ndim == 2:
@@ -910,7 +968,7 @@ def make_mastersky(sky_files_list, master_sky_filepath, owerwrite):
 
     hdu = fits.PrimaryHDU(data=median_sky)
     hdul = fits.HDUList([hdu])
-    hdul[0].header = hdul[0].header
+    hdul[0].header = sanitize_header(sky_header)
 
     hdul[0].header['MEANTEMP'] = np.mean(sky_temps)
     for temps in sky_temps:
@@ -1053,7 +1111,6 @@ def correct_cosmic_rays(image, n_sigma, box_radius):
 
     cosmic_mask = cosmic_ray_detect(image,n_sigma,box_radius)
     image_cleaned = clean_bp(cosmic_mask, np.array([image]))[0]
-    logging.info('\n')
 
     return image_cleaned
 
@@ -1071,10 +1128,23 @@ def correct_cosmic_rays_multiprocessing(input_cube, nproc, n_sigma, box_radius):
     return np.array(results)
 
 
+def correct_anamorphism_wrapper(input_frame, scaling, imlib, interpolation):
+    """
+    easy wrapper to call the frame_px_resampling function for distortion correction
+    
+    :param input_frame: Description
+    :param scaling: Description
+    :param imlib: Description
+    :param interpolation: Description
+    """
+    return frame_px_resampling(input_frame, scaling, imlib=imlib, interpolation=interpolation, keep_center=True)
+
+
 def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_center_file,
                   star_name, obs_night, filter_name, subtract_median_science_sky_bkg,
-                  sphere_offset, sky_files_exist, master_sky_filepath,
+                  sphere_offset, sphere_true_north_correction, sky_files_exist, master_sky_filepath,
                   image_shift_library, image_shift_interpolation,
+                  correct_distortion, scaling,
                   skip_dither_correction, nproc, n_sigma, box_radius,
                   make_plots, overwrite, full_output):
 
@@ -1084,6 +1154,8 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     
     cube = []
     angs = []
+    all_times = []
+    all_times_mjd = []
 
     header_infos = pd.DataFrame(columns = ['file', 'start_angle', 'end_angle', 'dither_x', 'dither_y', 'n_frames'])
 
@@ -1096,9 +1168,12 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             header = fits.getheader(file)
             angend = header['HIERARCH ESO TEL PARANG END'] %360
             angstart = header['HIERARCH ESO TEL PARANG START'] %360
+            time_start = header['DATE-OBS'] # DATE-OBS : when the OB was started 
+            time_end = header['DATE'] # DATE : time when the file was written
             dith_x = header['HIERARCH ESO INS1 DITH POSX']
             dith_y = header['HIERARCH ESO INS1 DITH POSY']
             temp = header['HIERARCH ESO INS4 TEMP449 VAL']
+            exp_time = header['EXPTIME']
             
         except KeyError as e:
             print(file)
@@ -1111,16 +1186,24 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
                                                 'dither_x': [dith_x],
                                                 'dither_y': [dith_y],
                                                 'n_frames': [len(data)],
-                                                'filter_temp': [temp]
+                                                'filter_temp': [temp],
+                                                'exp_time': [exp_time],
                                                 })],ignore_index=True)
 
         diff = (angstart - angend) / len(data) 
         angs_i = np.linspace(angstart + diff/2, angend - diff/2, len(data))
+        start_time_mjd = Time(time_start, format='isot', scale='utc').mjd
+        end_time_mjd = Time(time_end, format='isot', scale='utc').mjd
+
+        times_mjd = np.linspace(start_time_mjd, end_time_mjd, len(data))
+        times = Time(times_mjd, format='mjd').iso
 
         # add sphere offset
         angs_i += sphere_offset
+        # add true north offset
+        angs_i += sphere_true_north_correction
 
-        for ang, image in zip(angs_i, data): 
+        for ang, image, time, time_mjd in zip(angs_i, data, times, times_mjd): 
             
             # subtract the median skybkg 
             median_sky_bkg = np.nanmedian(image)
@@ -1130,10 +1213,18 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             # int divide ang by 360 to only have angles between 0 and 360
             angs.append(ang)
 
+            all_times.append(time)
+            all_times_mjd.append(time_mjd)
+
     angs = np.array(angs)
     cube = np.array(cube)
-    
+
+    logging.info('\t -> loaded the all the data files for the cube')
+
     header_infos.to_csv(os.path.join(os.path.dirname(output_file_cube), 'header_infos.csv'), index=False)
+
+    Times_df = pd.DataFrame({"time": all_times, "mjd": all_times_mjd})
+    Times_df.to_csv(os.path.join(os.path.dirname(output_file_cube), 'times.csv'), index=False)
 
     if make_plots: 
         
@@ -1150,6 +1241,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     all_x_dith_shifts = np.zeros(total_number_of_frames) * np.nan
     all_y_dith_shifts = np.zeros(total_number_of_frames) * np.nan
     temps = np.zeros(len(cube)) * np.nan
+    exp_times = np.zeros(len(cube)) * np.nan
 
     k = 0
     for i, n_exp in enumerate(header_infos['n_frames']):
@@ -1157,17 +1249,23 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             all_x_dith_shifts[k] = header_infos['dither_x'][i]
             all_y_dith_shifts[k] = header_infos['dither_y'][i]
             temps[k] = header_infos['filter_temp'][i]
+            exp_times[k] = header_infos['exp_time'][i]
             k += 1
 
-    if np.isnan(all_x_dith_shifts).any() or np.isnan(all_y_dith_shifts).any() or np.isnan(temps).any():
+    if np.isnan(all_x_dith_shifts).any() or np.isnan(all_y_dith_shifts).any() or np.isnan(temps).any() or np.isnan(exp_times).any():
         raise ValueError('Dither shifts contain NaNs, please check the headers')
     
     if sky_files_exist:
-        master_sky = fits.getdata(master_sky_filepath)
-        mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
-        
+        try: 
+            master_sky = fits.getdata(master_sky_filepath)
+            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
+            master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
+        except Exception as e:
+            print('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
+            raise ValueError(e)
+
         for i in range(len(cube)):
-            cube[i] = cube[i] - master_sky/mean_sky_filter_temp * temps[i]
+            cube[i] = cube[i] - master_sky * temps[i]/mean_sky_filter_temp * exp_times[i]/master_sky_exptime
 
     for i, (xx,yy) in enumerate(zip(all_x_dith_shifts, all_y_dith_shifts)):
         cube[i] = np.roll(cube[i], (-int(yy), -int(xx)), axis=(0,1))
@@ -1222,15 +1320,82 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     # make the cosmic ray correction
     logging.info('\t -> correcting the cube for cosmic rays')
     cube_sigcorr_indv = correct_cosmic_rays_multiprocessing(np.nan_to_num(expanded_cube), nproc, n_sigma, box_radius)
+    logging.info('\n')
 
     # now shift the center to a full pixel
     logging.info('\t -> now centering the cube on a sub pixel level')
     float_centered_cube = cube_shift(np.nan_to_num(cube_sigcorr_indv), float_center_y, float_center_x, imlib=image_shift_library, interpolation=image_shift_interpolation)
 
+    # now correct for the anamorphic distortion
+    logging.info('\t -> correcting the cube for anamorphic distortion')
+    if correct_distortion:
+        logging.info('\t -> applying anamorphic scaling of {} in x and {} in y'.format(scaling[0], scaling[1]))
+
+        if image_shift_library == 'vip-fft':
+            Warning('vip-fft does not support non equal axis scaling, switching to opencv - lanczos4 for the anamorphic correction')
+            image_shift_library_anam = 'opencv'
+            image_shift_interpolation_anam = 'lanczos4'
+        else:
+            image_shift_library_anam = image_shift_library
+            image_shift_interpolation_anam = image_shift_interpolation
+
+        if float_centered_cube.ndim == 3:
+            
+            if float_centered_cube.shape[1] % 2 == 0 or float_centered_cube.shape[2] % 2 == 0:
+                Warning('Input frame must be odd-sized otherwise the center will be shifted!')
+            
+            if nproc is None:
+                nproc = multiprocessing.cpu_count()//2
+
+            # Correct darks using multiprocessing 
+            with multiprocessing.Pool(processes=nproc) as pool:
+                
+                cube_len = len(float_centered_cube)
+                anam_corr_cube = pool.starmap(correct_anamorphism_wrapper,
+                                               zip([frame for frame in float_centered_cube],
+                                                   [scaling]*cube_len,
+                                                   [image_shift_library_anam]*cube_len,
+                                                   [image_shift_interpolation_anam]*cube_len))
+                pool.close()  
+                anam_corr_cube = np.array(anam_corr_cube)
+
+        else: 
+            raise ValueError('Input frame must be a 3D array and not {}'.format(float_centered_cube.ndim))
+
+        float_centered_cube_x_size = float_centered_cube.shape[2]
+        float_centered_cube_y_size = float_centered_cube.shape[1]
+
+        anam_corr_cube_x_size = anam_corr_cube.shape[2]
+        anam_corr_cube_y_size = anam_corr_cube.shape[1]
+
+        anam_corr_cube_x_cut = abs(float_centered_cube_x_size - anam_corr_cube_x_size)  
+        anam_corr_cube_y_cut = abs(float_centered_cube_y_size - anam_corr_cube_y_size)
+
+        if anam_corr_cube_x_cut % 2 != 0 or anam_corr_cube_y_cut % 2 != 0:
+            raise ValueError('After distortion correction the cube size difference is odd, please check the scaling factors')
+        
+        print('original cube size: x = {}, y = {}'.format(float_centered_cube_x_size, float_centered_cube_y_size))
+        print('anamorphic corrected cube size: x = {}, y = {}'.format(anam_corr_cube_x_size, anam_corr_cube_y_size))
+        print('cutting away {} pixels in x and {} pixels in y after anamorphic correction'.format(anam_corr_cube_x_cut, anam_corr_cube_y_cut))
+
+        print('new limits: x = {} to {}, y = {} to {}'.format(anam_corr_cube_x_cut//2,
+                                                             anam_corr_cube_x_size-anam_corr_cube_x_cut//2,
+                                                             anam_corr_cube_y_cut//2,
+                                                             anam_corr_cube_y_size-anam_corr_cube_y_cut//2))
+
+        anam_corr_cube = anam_corr_cube[:,
+                                        anam_corr_cube_y_cut//2:anam_corr_cube_y_size-anam_corr_cube_y_cut//2,
+                                        anam_corr_cube_x_cut//2:anam_corr_cube_x_size-anam_corr_cube_x_cut//2]
+
+        print('final cube size after cutting: x = {}, y = {}'.format(anam_corr_cube.shape[2], anam_corr_cube.shape[1]))
+
+    else:
+        anam_corr_cube = float_centered_cube
+
     if not skip_dither_correction:
         # now correct for the dithers:
         logging.info('\t -> finally correcting the cube for telescope dithers')
-        dither_corr_cube, shy2a, shx2a = cube_recenter_dft_upsampling(np.nan_to_num(float_centered_cube), upsample_factor=100,
+        dither_corr_cube, shy2a, shx2a = cube_recenter_dft_upsampling(np.nan_to_num(anam_corr_cube), upsample_factor=100,
                                                                     subi_size=None, # set this to None so no over all recentering is done, this has been done already using satellite spots
                                                                     center_fr1=frame_center(cube[0]), 
                                                                     fwhm=4, negative=True,
@@ -1259,8 +1424,8 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             plt.savefig(os.path.join(os.path.dirname(output_file_cube), '_subpixel_alignment_shifts.pdf'), format='pdf', dpi = 120)
             plt.close()
     else:
-        dither_corr_cube = float_centered_cube
-        
+        dither_corr_cube = anam_corr_cube
+
     # now masking out the center of the cube
     logging.info('\t -> masking out the center of the cube, setting the edges to NaN')
     masked_cube = dither_corr_cube * nan_mask

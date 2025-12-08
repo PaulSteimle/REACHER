@@ -71,21 +71,24 @@ class Parameters:
         # For Opencv the options are: ‘nearneig’, ‘bilinear’, ‘bicubic’ or ‘lanczos4’. 
         # The ‘nearneig’ interpolation is the fastest and the ‘lanczos4’ the slowest and more accurate. ‘lanczos4’ is the default for Opencv and ‘biquartic’ for Skimage.
 
-
         # parameters for making the final cube
         self.skip_dither_correction = False
         self.subtract_median_science_sky_bkg = False
+        self.correct_anamorphism = True 
 
         # 
+        self.save_fullsize_flux = False
         self.flux_cut_out_size = 41
         self.star_loc = (401, 466)  # expected star location (x, y) in the flux image, used for the cut out and gauss fit 
 
         self.full_output = True  # if True, save additioal cube to check for centering and bad pixel correction
 
-
         # telescope and instrument params
         self.sphere_offset = 135.99 # PA angles offset in degrees, from SPHERE manual
 
+        self.sphere_true_north_correction = -1.75  # degrees, from Maire et al. 2020 A&A 633A..63M
+
+        self.sphere_anamorphic_ratio = (1.0000, 1.0062) # this is the anamorhic corrections for x and y. These values come from A. Vigan 
         #  
         self.clean_stage_1_and_2 = False
         self.clean_calibrations = False
@@ -97,12 +100,14 @@ class Parameters:
         self.FLAT_DF = make_flat_DF(self.raw_input_dir)
         self.BACKGROUND_DF = make_background_DF(self.raw_input_dir)
 
-    def get_star_dataframe(self):
-        self.STAR_DF = make_star_DF(self.raw_input_dir, self.star_name, self.obs_night, self.filter_name)
+    def get_star_dataframe(self, input_dir=None):
+        if input_dir is None:
+            input_dir = self.raw_input_dir
+        self.STAR_DF = make_star_DF(input_dir, self.star_name, self.obs_night, self.filter_name)
 
     @property
     def recentering_folder(self):
-        return os.path.join(self.raw_input_dir, 'recentering')
+        return os.path.join(self.reduced_output_dir, 'recentering')
 
     @property
     def master_flat_folder(self):

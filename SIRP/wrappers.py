@@ -80,7 +80,8 @@ def make_master_bkg_wrapper(bkg_filepaths, params, plot=False):
 def calibrate_files_wrapper(input_file, output_file, masterdark_filepath, masterflat_filepath, params):
     """Calibrate the raw files with Masterdark, Masterflat and Masterbackground, if applicable."""
     routines.calibrate_files(input_file, output_file, masterdark_filepath, masterflat_filepath, 
-                             params.master_background_filepath, params.bad_pix_mask_filepath, params.clump_mask_filepath, params.overwrite)
+                             params.master_background_filepath, params.bad_pix_mask_filepath, params.clump_mask_filepath,
+                             params.overwrite)
     return
 
 
@@ -120,7 +121,7 @@ def split_files_multiprocessing_wrapper(input_files, output_files_left, output_f
 
 def make_mastersky_wrapper(sky_files_list, params):
     """ Wrapper function to create a master sky from a list of sky files. It is important that the parameters object contains the correct master_sky_path."""
-    routines.make_master_sky(sky_files_list, params.master_sky_path, params.overwrite)
+    routines.make_mastersky(sky_files_list, params.master_sky_filepath, params.overwrite)
     return 
 
 
@@ -137,7 +138,10 @@ def get_science_exp_time_wrapper(input_files):
 
 def create_flux_file_wrapper(input_file, output_file, science_exp_time, L_or_R, params, center = (401, 466)):
     """ Wrapper function to create a flux file from a science file. """
-    routines.create_flux_file(input_file, output_file, science_exp_time, L_or_R, params.overwrite, params.image_shift_library, params.image_shift_interpolation, params.make_plots, params.flux_cut_out_size, params.star_loc)
+    routines.create_flux_file(input_file, output_file, science_exp_time, L_or_R, 
+                              params.sky_files_exist, params.master_sky_filepath,
+                              params.overwrite, params.image_shift_library, params.image_shift_interpolation, 
+                              params.make_plots, params.flux_cut_out_size, params.star_loc, params.save_fullsize_flux)
     return
 
 
@@ -150,8 +154,9 @@ def make_the_cube_wrapper(all_science, output_file_cube, output_file_angs, shift
     """ Wrapper function to create the final cube from all science files. """
     routines.make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_center_file,
                             params.star_name, params.obs_night, params.filter_name, params.subtract_median_science_sky_bkg,
-                            params.sphere_offset, params.sky_files_exist, params.master_sky_filepath,
+                            params.sphere_offset, params.sphere_true_north_correction, params.sky_files_exist, params.master_sky_filepath,
                             params.image_shift_library, params.image_shift_interpolation,
+                            params.correct_anamorphism, params.sphere_anamorphic_ratio,
                             params.skip_dither_correction, params.nproc, params.n_sigma, params.box_radius,
                             params.make_plots, params.overwrite, params.full_output)
     return 

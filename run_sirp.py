@@ -4,10 +4,10 @@ import os
 
 pars = SIRP.Parameters()
 
-SIRP.setup_logging(log_file='/home/pasteimle/code/output_HD59659.log', level=logging.INFO)
+SIRP.setup_logging(log_file='/home/pasteimle/code/output_HD1461.log', level=logging.INFO)
 
-pars.raw_input_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/ISPY_raw_files/'
-pars.reduced_output_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/ISPY_reduced_cubes/'
+pars.raw_input_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/HD1461_grouped/'
+pars.reduced_output_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/HD1461_reduced_new/'
 
 # pars.raw_input_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/Background_data_ISPY2/'
 # pars.reduced_output_dir = '/data/beegfs/astro-storage/groups/beuther/pasteimle/Background_data_ISPY_proc/'
@@ -37,46 +37,48 @@ ref_cubes_dict = {
 
 pars.overwrite = True
 pars.skip_dither_correction = True
-pars.clean_calibrations = True
-pars.clean_stage_1_and_2 = True
+pars.clean_calibrations = False
+pars.clean_stage_1_and_2 = False
+pars.save_fullsize_flux = False
+pars.only_flux = False 
 
 if __name__ == "__main__":
 
-    _ = SIRP.make_bad_pix_masks(pars)   
+    # _ = SIRP.make_bad_pix_masks(pars)   
 
-    _ = SIRP.make_all_masterdarks(pars)
+    # _ = SIRP.make_all_masterdarks(pars)
 
-    _ = SIRP.make_all_masterflats(pars)
+    # _ = SIRP.make_all_masterflats(pars)
     
     # _ = SIRP.make_all_masterbackgrounds(input_dir, output_dir, nproc=nproc, overwrite=True)
     
-    for star in all_stars:
+    # for star in all_stars:
 
-        star_parent_dir = os.path.join(pars.raw_input_dir,star,'IRDIS')
-        all_obs_nights = os.listdir(star_parent_dir)
-        for obs_night in all_obs_nights:
+    #     star_parent_dir = os.path.join(pars.raw_input_dir,star,'IRDIS')
+    #     all_obs_nights = os.listdir(star_parent_dir)
+    #     for obs_night in all_obs_nights:
 
-            obs_night_parent_dir = os.path.join(star_parent_dir,obs_night)
-            filters = os.listdir(obs_night_parent_dir)
+    #         obs_night_parent_dir = os.path.join(star_parent_dir,obs_night)
+    #         filters = os.listdir(obs_night_parent_dir)
 
-            for filter_name in filters:
+    #         for filter_name in filters:
 
-                if not 'ND' in filter_name:
+    #             if not 'ND' in filter_name:
 
-                    filter_parent_dir = os.path.join(obs_night_parent_dir,filter_name)
+    #                 filter_parent_dir = os.path.join(obs_night_parent_dir,filter_name)
                     
-                    pars.star_name = star
-                    pars.obs_night = obs_night
-                    pars.filter_name = filter_name
-                    pars.get_star_dataframe()
+    #                 pars.star_name = star
+    #                 pars.obs_night = obs_night
+    #                 pars.filter_name = filter_name
+    #                 pars.get_star_dataframe()
 
-                    _ = SIRP.pre_calibration_and_extraction(pars)
+    #                 _ = SIRP.pre_calibration_and_extraction(pars)
 
-    _ = SIRP.grab_all_files(pars, all_stars)
+    # _ = SIRP.grab_all_files(pars, ref_cubes_dict.keys())
     
-    _ = SIRP.return_csv_files(pars.raw_input_dir, all_stars)
+    # _ = SIRP.return_csv_files(pars, ref_cubes_dict.keys())
     
-    for star in ref_cubes_dict.keys():
+    for star in ['HD1461']: #ref_cubes_dict.keys():
 
         if star == 'HD101412':
             pars.fixed_user_mastersky['left'] = '/data/beegfs/astro-storage/groups/beuther/pasteimle/Background_data_ISPY_proc/master_sky_files/master_sky_HD101412_left.fits'
@@ -89,6 +91,7 @@ if __name__ == "__main__":
 
         star_parent_dir = os.path.join(pars.raw_input_dir,star,'IRDIS')
         all_obs_nights = os.listdir(star_parent_dir)
+        all_obs_nights = ['2025-11-24', '2025-11-25']
 
         for obs_night in all_obs_nights:
             obs_night_parent_dir = os.path.join(star_parent_dir,obs_night)
@@ -103,7 +106,7 @@ if __name__ == "__main__":
 
                 _ = SIRP.centering_and_bad_pix_correction(pars, ref_cubes_dict=ref_cubes_dict)
 
-    _ = SIRP.cleanup_all_folders(pars)
+    # _ = SIRP.cleanup_all_folders(pars)
 
 
 
