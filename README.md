@@ -1,4 +1,4 @@
-# REACHER - **R**aw image **E**xtraction and **C**alibration or **H**igh-contrast **E**xoplanet **R**eductions
+# REACHER - **R**aw image **E**xtraction And **C**alibration for **H**igh-contrast **E**xoplanet **R**eductions
 
 A Python-based pipeline for the pre-processing and analysis of high-contrast imaging (HCI) data currently only applicable to **VLT SPHERE/IRDIS**, designed to facilitate the **detection of circumstellar disks and exoplanets**.
 REACHER allows for automated pre-procssing of SPHERE IRDIS datasets collected with and without star-hopping in the DBI mode. It takes users from raw archive data to science-ready results, integrating seamlessly with the [VIP HCI](https://github.com/vortex-exoplanet/VIP) package for advanced post-processing.
