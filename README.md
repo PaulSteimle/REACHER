@@ -29,7 +29,7 @@ REACHER allows for automated pre-procssing of SPHERE IRDIS datasets collected wi
 
 ## 📥 Input Data
 
-The pipeline is designed to work with **raw SPHERE/IRDIS .fits files** from the **ESO Archive**. You'll need to manually download the science and calibration data for your target of interest.
+The pipeline is designed to work with **raw SPHERE/IRDIS.fits files** from the **ESO Archive**. In this version you'll need to manually download the science and calibration data for your target of interest. Further renaming and restructuring of the data is explained below.
 
 ## 🚀 Getting Started
 
