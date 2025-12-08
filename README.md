@@ -65,12 +65,12 @@ download_directory = '/path/to/downloaded/data/'
 new_directory = '/path/to/structured/data/'
 
 REACHER.move_files_from_download_dir(download_directory, new_directory, rename_dict)
-´´´
+```
 
-This will structure your data according to:
+This will rename targets if needed and structures your data according to:
 
 ```css
-data/
+data_path/
 ├── science/
 │   └── IRDIS/
 │       └── obs_night/
@@ -83,9 +83,8 @@ data/
 │   └── IRDIS/
 │       └── obs_night/
 │           └── filter/
-
-
 ```
+
 from where then REACHER will grab the needed files
 
 
@@ -105,7 +104,31 @@ Make sure to configure your reduction settings in the provided config.yaml.
 
 - The pipeline will produce:
 
-- Calibrated and aligned science frames
+- Calibrated and aligned science frames in the final directory accoring to: 
+
+```css
+data_path/
+├── target1/
+│   └── IRDIS/
+│       └── obs_night/
+│           └── filter/
+│               └── left/right /
+│                   └── raw_files/
+│                       └── left_mastercube.fits/
+│                       └── left_parallactic_angles.fits/
+│                       └── left_flux.fits/
+├── target2/
+│   └── IRDIS/
+│       └── obs_night/
+│           └── filter/
+│               └── left/right /
+│                   └── raw_files/
+│                       └── left_mastercube.fits/
+│                       └── left_parallactic_angles.fits/
+│                       └── left_flux.fits/
+...
+```
+
 
 - Diagnostic plots (optional)
 
