@@ -81,7 +81,7 @@ class Parameters:
         self.flux_cut_out_size = 41
         self.star_loc = (401, 466)  # expected star location (x, y) in the flux image, used for the cut out and gauss fit 
 
-        self.full_output = True  # if True, save additioal cube to check for centering and bad pixel correction
+        self.full_output = False  # if True, save additioal cube to check for centering and bad pixel correction
 
         # telescope and instrument params
         self.sphere_offset = 135.99 # PA angles offset in degrees, from SPHERE manual
