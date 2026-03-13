@@ -33,7 +33,7 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
         logging.info('\t -> {} exists skipping file'.format(os.path.basename(bad_pix_mask_filepath)))
         return
 
-    logging.info('making bad pixel mask '.format(basename(bad_pix_mask_filepath)))
+    logging.info('making bad pixel mask {}'.format(basename(bad_pix_mask_filepath)))
 
     all_dark_file_data = []
     
@@ -44,17 +44,17 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
             if cube.shape[0] == 2048:
                 pass
             elif cube.shape[1] == 1024:
-                print('adding 2d dark file data', cube.shape)
+                #print('adding 2d dark file data', cube.shape)
                 all_dark_file_data.append(cube)
         elif cube.ndim == 3:
             
             if cube.shape[1] == 2048:
                 pass
             elif cube.shape[1] == 1024:
-                print('adding 3d dark file data', cube.shape)
+                #print('adding 3d dark file data', cube.shape)
                 for image in cube:
                     all_dark_file_data.append(image)
-        hdul.close()
+
 
     all_dark_file_data = np.array(all_dark_file_data)
 
@@ -66,7 +66,7 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
     # the 1.4826 converts the Median Absolute Deviation
     # to the standard deviation for a Normal distribution
 
-    print("Sigma: " + str(sigma) + ", median: " + str(med))
+    logging.info("Sigma: " + str(sigma) + ", median: " + str(med))
 
     # Creates a tuple with the x-y positions of the dead pixels
     deadpix = np.where(sky < med - sigma * coef)
@@ -149,6 +149,7 @@ def correct_bad_pix(input_cube, bad_pix_mask_filepath, clump_mask_filepath, corr
     nan_mask[clump_mask == 1] = np.nan
     # correct all for the bad pixels
     # first the indicual bad pixels
+
     badpix_corr_data = cube_fix_badpix_isolated(input_cube, bpm_mask=bpm_mask, correct_only=True,
                                             frame_by_frame=False, mad=True, verbose=True, ignore_nan=False)
 
@@ -292,6 +293,10 @@ def make_master_flat(flats_list, master_darks_list, masterflat_filepath, bad_pix
         if header_master_flat is None:
             header_master_flat = sanitize_header(hdul_flat[0].header)
         
+        if hdul_flat[0].data.ndim != 2 and hdul_flat[0].data.ndim != 3:
+            logging.info('\t -> {} is not a 2D or 3D file, skipping'.format(os.path.basename(flat_filepat)))
+            continue 
+
         if hdul_flat[0].data.ndim == 2:
             flat_i =  hdul_flat[0].data - hdul_masterdark[0].data
 
@@ -460,7 +465,8 @@ def calibrate_files(input_file, output_file, masterdark_filepath, masterflat_fil
     hdul = fits.open(input_file)
     science_data = hdul[0].data
 
-    calibrated_science_data = (science_data - np.nan_to_num(master_dark))/np.nan_to_num(master_flat)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        calibrated_science_data = (science_data - np.nan_to_num(master_dark))/np.nan_to_num(master_flat)
 
     # todo : add option to correct for master background which does not seem to work at this moment
     # if master_background is not None:
@@ -744,7 +750,7 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
             mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
             master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
         except Exception as e:
-            print('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
+            logging.error('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
             raise ValueError(e)
 
         stacked_flux_image = stacked_flux_image - master_sky * temp/mean_sky_filter_temp * exp_time/master_sky_exptime
@@ -765,6 +771,28 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
     # fit a gauss to find the center 
     med_y, med_x = fit_2dgaussian(stacked_flux_image, crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=False)
     
+    if np.isnan(med_y) or np.isnan(med_x):
+        med_y, med_x = fit_2dgaussian(stacked_flux_image, crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=True)
+
+
+    if np.isnan(med_y) or np.isnan(med_x):
+        plot_dir = os.path.join(os.path.dirname(output_file),  'flux_pngs')
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
+
+        show_img(rescaled_image, minper=1, maxper=99, size =5)
+        plt.scatter(20,20, marker='x', color='red', s=100)
+        plt.savefig(os.path.join(plot_dir,os.path.basename(output_file).replace('.fits', '.pdf')), bbox_inches='tight', dpi=120)
+        plt.close()
+
+        show_img(stacked_flux_image * exp_time_ratio / nd_ratio, minper=1, maxper=99, size = 5)
+        plt.scatter(med_x, med_y, marker='x', color='red', s=100)
+        plt.xlim(med_x - 20, med_x  +20)
+        plt.ylim(med_y - 20, med_y  +20)
+        plt.savefig(os.path.join(plot_dir,os.path.basename(output_file).replace('.fits', '2.pdf')), bbox_inches='tight', dpi=120)
+        plt.close()
+
+
     #cut out the center of the flux image
     # divide the shift in integer and float
     int_center_x = int(np.floor(med_x))
@@ -899,11 +927,13 @@ def get_center(input_file, make_plots, center = None):
     center_shifty = np.mean(res[1])
     center_shiftx = np.mean(res[2])
 
+    true_center = (np.mean(res[3]), np.mean(res[4]))
+
+    logging.info('Resulting in new center at x = {:1.1f}, y = {:1.1f}'.format(true_center[0], true_center[1]))    
+
     if make_plots: 
         shifted_image = np.nanmedian(res[0], axis = 0)
-        shiftxy = (res[1], res[2])
         true_center = (np.mean(res[3]), np.mean(res[4]))
-
 
         # the unshifted image 
         show_img(image, minper=0.1, maxper=99.9, xlim=[center[0]-100,center[0]+100], ylim=[center[1]-100,center[1]+100], size = 2,)
@@ -923,7 +953,6 @@ def get_center(input_file, make_plots, center = None):
         #plt.savefig('test.png')
         plt.close()
 
-    
 
     return center_shifty, center_shiftx
 
@@ -1146,7 +1175,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
                   image_shift_library, image_shift_interpolation,
                   correct_distortion, scaling,
                   skip_dither_correction, nproc, n_sigma, box_radius,
-                  make_plots, overwrite, full_output):
+                  make_plots, overwrite, full_output, do_cubes, skip_cosmics):
 
     if os.path.exists(output_file_cube) and not overwrite:
         logging.info('\t -> {} exists skipping file'.format(os.path.basename(output_file_cube)))
@@ -1166,8 +1195,8 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         try:
             # do the %360 as the angles range from -180 to 180 which gives issues when crossing the 180 line
             header = fits.getheader(file)
-            angend = header['HIERARCH ESO TEL PARANG END'] %360
-            angstart = header['HIERARCH ESO TEL PARANG START'] %360
+            angend = float(header['HIERARCH ESO TEL PARANG END'])
+            angstart = float(header['HIERARCH ESO TEL PARANG START'])
             time_start = header['DATE-OBS'] # DATE-OBS : when the OB was started 
             time_end = header['DATE'] # DATE : time when the file was written
             dith_x = header['HIERARCH ESO INS1 DITH POSX']
@@ -1176,8 +1205,10 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             exp_time = header['EXPTIME']
             
         except KeyError as e:
-            print(file)
+            logging.error(file)
             raise KeyError(e)
+
+        logging.info('\t\t -> file {} has {} frames from angle {} to {} deg'.format(os.path.basename(file), len(data), angstart, angend))
 
         header_infos = pd.concat([header_infos,pd.DataFrame({
                                                 'file': [os.path.basename(file)],
@@ -1190,8 +1221,18 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
                                                 'exp_time': [exp_time],
                                                 })],ignore_index=True)
 
-        diff = (angstart - angend) / len(data) 
-        angs_i = np.linspace(angstart + diff/2, angend - diff/2, len(data))
+        # check if the interval runs over the 180 deg border and changes sign,
+        # in this case multipling start by end is negative since 1 value is negative 
+        # additionally if running over the 180 deg line the sum of the absolute values is larger than 180
+        if angend * angstart < 0 and abs(angend) + abs(angstart) > 180:
+            if angstart < 0: angstart = angstart % 360
+            elif angend < 0: angend = angend % 360
+
+        #diff = abs(angstart - angend) / len(data) 
+        #angs_i = np.linspace(angstart + diff/2, angend - diff/2, len(data))
+
+        angs_i = angstart + (angend - angstart) * (0.5+np.arange(len(data)))/len(data)
+
         start_time_mjd = Time(time_start, format='isot', scale='utc').mjd
         end_time_mjd = Time(time_end, format='isot', scale='utc').mjd
 
@@ -1202,6 +1243,9 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         angs_i += sphere_offset
         # add true north offset
         angs_i += sphere_true_north_correction
+
+        # make again sure angles are between 0 and 360 as the offsets could have pushed them out of this range
+        angs_i = angs_i % 360
 
         for ang, image, time, time_mjd in zip(angs_i, data, times, times_mjd): 
             
@@ -1221,6 +1265,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
 
     logging.info('\t -> loaded the all the data files for the cube')
 
+    np.savetxt(output_file_angs, angs, fmt='%f')
     header_infos.to_csv(os.path.join(os.path.dirname(output_file_cube), 'header_infos.csv'), index=False)
 
     Times_df = pd.DataFrame({"time": all_times, "mjd": all_times_mjd})
@@ -1235,6 +1280,10 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         ax.set_title(f"rotation angles for {star_name} on {obs_night} with filter {filter_name}")
         plt.savefig(os.path.join(os.path.dirname(output_file_cube), 'rotation_angles.pdf'), format='pdf')
         plt.close()
+
+    if not do_cubes:
+        logging.info('not making the cube, returning!')
+        return
 
     # convert the infos given per file to infos per frame
     total_number_of_frames = len(cube)
@@ -1261,7 +1310,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
             mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
             master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
         except Exception as e:
-            print('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
+            logging.error('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
             raise ValueError(e)
 
         for i in range(len(cube)):
@@ -1314,13 +1363,16 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     nan_mask[int(diff_y + int_shift_y) : int(-diff_y + int_shift_y),
              int(diff_x + int_shift_x) : int(-diff_x + int_shift_x)] = 1  
     
-    mask = circular_aperture(nan_mask, 520, inverted=False)
-    nan_mask[mask == 0] = np.nan
+    #mask = circular_aperture(nan_mask, 520, inverted=False)
+    #nan_mask[mask == 0] = np.nan
 
     # make the cosmic ray correction
-    logging.info('\t -> correcting the cube for cosmic rays')
-    cube_sigcorr_indv = correct_cosmic_rays_multiprocessing(np.nan_to_num(expanded_cube), nproc, n_sigma, box_radius)
-    logging.info('\n')
+    if not skip_cosmics:
+        logging.info('\t -> correcting the cube for cosmic rays')
+        cube_sigcorr_indv = correct_cosmic_rays_multiprocessing(np.nan_to_num(expanded_cube), nproc, n_sigma, box_radius)
+        logging.info('\n')
+    else: 
+        cube_sigcorr_indv = expanded_cube
 
     # now shift the center to a full pixel
     logging.info('\t -> now centering the cube on a sub pixel level')
@@ -1374,11 +1426,11 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         if anam_corr_cube_x_cut % 2 != 0 or anam_corr_cube_y_cut % 2 != 0:
             raise ValueError('After distortion correction the cube size difference is odd, please check the scaling factors')
         
-        print('original cube size: x = {}, y = {}'.format(float_centered_cube_x_size, float_centered_cube_y_size))
-        print('anamorphic corrected cube size: x = {}, y = {}'.format(anam_corr_cube_x_size, anam_corr_cube_y_size))
-        print('cutting away {} pixels in x and {} pixels in y after anamorphic correction'.format(anam_corr_cube_x_cut, anam_corr_cube_y_cut))
+        logging.info('original cube size: x = {}, y = {}'.format(float_centered_cube_x_size, float_centered_cube_y_size))
+        logging.info('anamorphic corrected cube size: x = {}, y = {}'.format(anam_corr_cube_x_size, anam_corr_cube_y_size))
+        logging.info('cutting away {} pixels in x and {} pixels in y after anamorphic correction'.format(anam_corr_cube_x_cut, anam_corr_cube_y_cut))
 
-        print('new limits: x = {} to {}, y = {} to {}'.format(anam_corr_cube_x_cut//2,
+        logging.info('new limits: x = {} to {}, y = {} to {}'.format(anam_corr_cube_x_cut//2,
                                                              anam_corr_cube_x_size-anam_corr_cube_x_cut//2,
                                                              anam_corr_cube_y_cut//2,
                                                              anam_corr_cube_y_size-anam_corr_cube_y_cut//2))
@@ -1387,8 +1439,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
                                         anam_corr_cube_y_cut//2:anam_corr_cube_y_size-anam_corr_cube_y_cut//2,
                                         anam_corr_cube_x_cut//2:anam_corr_cube_x_size-anam_corr_cube_x_cut//2]
 
-        print('final cube size after cutting: x = {}, y = {}'.format(anam_corr_cube.shape[2], anam_corr_cube.shape[1]))
-
+        logging.info('final cube size after cutting: x = {}, y = {}'.format(anam_corr_cube.shape[2], anam_corr_cube.shape[1]))
     else:
         anam_corr_cube = float_centered_cube
 
@@ -1470,7 +1521,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
 
     hdul2.writeto(output_file_cube, overwrite=True)
     hdul2.close()
-    np.savetxt(output_file_angs, angs, fmt='%f')
+
 
     if full_output:
         cube_shifted = cube_shift(cube, center_shifty, center_shiftx, imlib=image_shift_library, interpolation=image_shift_interpolation)

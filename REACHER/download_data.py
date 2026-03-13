@@ -71,15 +71,15 @@ def get_info(files, rename_dict):
 
 
         DF_i = pd.DataFrame({
-            "orig_file": file,
-            "object": object,
-            "exp_time": exp_time,
-            "obs_night": obs_night,
-            "filter_name": filter_name,
-            "nd_filter": nd_filter,
-            "type": type,
-            "filepath": filepath,
-            "folderpath": folderpath,})
+            "orig_file": [file],
+            "object": [object],
+            "exp_time": [exp_time],
+            "obs_night": [obs_night],
+            "filter_name": [filter_name],
+            "nd_filter": [nd_filter],
+            "type": [type],
+            "filepath": [filepath],
+            "folderpath": [folderpath],})
 
         DF = pd.concat([DF, DF_i], ignore_index=True)
     
@@ -101,7 +101,6 @@ def move_files_from_download_dir(download_directory, new_directory, rename_dict)
     DF = get_info(all_files, rename_dict)
 
     DF = DF[DF['object'] != 'OBJECT']
-
 
     for directory in DF['folderpath'].unique():
         full_path = os.path.join(new_directory, directory)

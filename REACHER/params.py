@@ -35,6 +35,13 @@ class Parameters:
         self.overwrite = True
         self.make_plots = True
         self.skip_bad_pix = False
+        self.skip_cosmics = False
+        
+        self.do_flux = True
+        self.do_cubes = True
+        self.do_angles = True
+
+        self.only_angles = False
         self.only_flux = False
 
         # all the dataframes
@@ -79,7 +86,10 @@ class Parameters:
         # 
         self.save_fullsize_flux = False
         self.flux_cut_out_size = 41
+        self.calib_valdity_threshold = 8 # in days, if no master dark or master flat file exists for the exact observation night, use the nearest one if it is within this threshold.
         self.star_loc = (401, 466)  # expected star location (x, y) in the flux image, used for the cut out and gauss fit 
+
+        self.star_center_index = 0    #index if the starcenter file to use, default is 0 
 
         self.full_output = False  # if True, save additioal cube to check for centering and bad pixel correction
 

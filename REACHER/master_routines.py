@@ -18,11 +18,11 @@ def make_bad_pix_masks(params):
     if not os.path.exists(params.bad_pix_mask_folder):
         os.makedirs(params.bad_pix_mask_folder)
 
-    obs_runs = params.DARK_DF['obs_run'].unique()
+    obs_nights = params.DARK_DF['obs_night'].unique()
 
-    for obs_run in obs_runs:
+    for obs_night in obs_nights:
         # create the bad_pix_mask
-        wrappers.make_bad_pix_mask_wrapper(obs_run, params)
+        wrappers.make_bad_pix_mask_wrapper(obs_night, params)
 
     # lastly create the clump mask for SPHERE/IRDIS
     wrappers.make_IRDIS_clump_mask_wrapper(params)
@@ -40,26 +40,26 @@ def make_all_masterdarks(params):
         os.makedirs(params.master_dark_folder)
 
     # get all the indiviaul obs runs
-    obs_runs = params.DARK_DF['obs_run'].unique()
+    obs_nights = params.DARK_DF['obs_night'].unique()
     
     # loop through all obs runs
-    for obs_run in obs_runs:
+    for obs_night in obs_nights:
 
        # first define the bad pixel mask for each of the runs 
-        params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
+        params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_night))
         #get all unique exp times to loop for them 
-        exp_times = params.DARK_DF[(params.DARK_DF['obs_run']== obs_run)]['exp_time'].unique()
+        exp_times = params.DARK_DF[(params.DARK_DF['obs_night']== obs_night)]['exp_time'].unique()
 
         # and create a master dark for each exp time
         for exp_time in exp_times:
             # set the params object
             #params.exp_time = exp_time
-            params.masterdark_filepath = os.path.join(params.master_dark_folder, 'master_dark_{}_{}.fits'.format(obs_run, exp_time))
+            params.masterdark_filepath = os.path.join(params.master_dark_folder, 'master_dark_{}_{}.fits'.format(obs_night, exp_time))
 
             #get all the input files 
-            dark_filepaths = params.DARK_DF[(params.DARK_DF['obs_run']== obs_run) & (params.DARK_DF['exp_time'] == exp_time)]['filepath']
+            dark_filepaths = params.DARK_DF[(params.DARK_DF['obs_night']== obs_night) & (params.DARK_DF['exp_time'] == exp_time)]['filepath']
 
-            logging.info('\n all input darks for obs run {}, exp_time {}:'.format(obs_run, exp_time))
+            logging.info('all input darks for obs night {}, exp_time {}:'.format(obs_night, exp_time))
             logging.info('\n'.join(dark_filepaths))
             logging.info('are combined to masterdark {} \n'.format(os.path.basename(params.masterdark_filepath)))
 
@@ -79,13 +79,17 @@ def make_all_masterflats(params):
     logging.info('#### Creating all master flats! ######################################################')
     logging.info('######################################################################################')
 
+    params.FLAT_DF = find_calib_files(params.FLAT_DF, params, calib_type='master_flat')
+    
+    # drop all the rows without masterflat. 
+    params.FLAT_DF = params.FLAT_DF[params.FLAT_DF['master_dark'] != 'None'] 
+
     if not os.path.exists(params.master_flat_folder):
         os.makedirs(params.master_flat_folder)
 
     obs_nights = params.FLAT_DF['obs_night'].unique()
     for obs_night in obs_nights:
-        obs_run = obs_night[:-3]
-
+    
         # get all filters in obs night
         filters = params.FLAT_DF[(params.FLAT_DF['obs_night']== obs_night)]['filter'].unique()
         for filter_name in filters:
@@ -93,14 +97,18 @@ def make_all_masterflats(params):
             logging.info('Working on {} {}'.format(obs_night, filter_name))
 
             # define the parameters object
-            params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
-            params.masterflat_filepath = os.path.join(params.master_flat_folder, 'master_flat_{}_{}.fits'.format(obs_night, filter_name))
+            filter_and_obs_night_DF = params.FLAT_DF[params.FLAT_DF['obs_night']== obs_night]
 
-            filter_and_obs_night_DF = params.FLAT_DF[(params.FLAT_DF['obs_run'] == obs_run) & (params.FLAT_DF['obs_night']== obs_night)]
+            params.masterflat_filepath = os.path.join(params.master_flat_folder, 'master_flat_{}_{}.fits'.format(obs_night, filter_name))
+        
+            # as the bad_pix_mask is defined per obs night, there should only be one unique bad_pix_mask for each obs night, so we can just take the first one. If there are more than one, something went wrong and we raise an error.
+            if len(filter_and_obs_night_DF['bad_pix_mask'].unique()) > 1:    
+                raise ValueError('more than one bad pixel mask found for obs night {} and filter {}. This should not happen, check the FLAT_DF .csv file.'.format(obs_night, filter_name))
+            
+            params.bad_pix_mask_filepath = filter_and_obs_night_DF['bad_pix_mask'].unique()[0]
 
             # for each file get the corresponding master dark
-            exp_times = filter_and_obs_night_DF['exp_time']
-            master_dark_list = [os.path.join(params.master_dark_folder, 'master_dark_{}_{}.fits'.format(obs_run, exp_time)) for exp_time in exp_times]
+            master_dark_list = filter_and_obs_night_DF['master_dark']
             flats_list = filter_and_obs_night_DF['filepath']
 
             wrappers.make_master_flat_wrapper(flats_list, master_dark_list, params)
@@ -133,7 +141,7 @@ def make_all_masterbackgrounds(params):
             params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
             params.masterflat_filepath = os.path.join(params.master_flat_folder, 'master_flat_{}_{}.fits'.format(obs_night, filter_name))
 
-            filter_and_obs_night_DF = params.FLAT_DF[(params.FLAT_DF['obs_run'] == obs_run) & (params.FLAT_DF['obs_night']== obs_night)]
+            filter_and_obs_night_DF = params.FLAT_DF[params.FLAT_DF['obs_night']== obs_night]
 
             # for each file get the corresponding master dark
             exp_times = filter_and_obs_night_DF['exp_time']
@@ -152,7 +160,6 @@ def make_all_masterbackgrounds(params):
 def pre_calibration_and_extraction(params):
 
     logging.info('working on {}, {}, {}'.format(params.star_name, params.obs_night, params.filter_name))
-    obs_run = params.obs_night[:-3]
 
     # get all the calibration files and check if they exist, otherwise returns an error
     # todo for the future this shuld have an option to create the missing files
@@ -182,7 +189,12 @@ def pre_calibration_and_extraction(params):
     all_raw_files = params.STAR_DF['filepath'].to_list()
     masterdark_list = params.STAR_DF['master_dark'].to_list()
     masterflat_list = params.STAR_DF['master_flat'].to_list()
-    params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
+
+    # as the bad_pix_mask is defined per obs night, there should only be one unique bad_pix_mask for each obs night, so we can just take the first one. If there are more than one, something went wrong and we raise an error.
+    if len(params.STAR_DF['bad_pix_mask'].unique()) > 1:    
+        raise ValueError('more than one bad pixel mask found for obs night {} and filter {}. This should not happen, check the FLAT_DF .csv file.'.format(params.obs_night, params.filter_name))    
+    params.bad_pix_mask_filepath = params.STAR_DF['bad_pix_mask'].to_list()[0]
+
     all_calibrated_files = [os.path.join(params.stage1_output_folder, 'CALIB_' + basename(f)) for f in all_raw_files]
 
     _ = wrappers.calibrate_files_multiprocessing_wrapper(all_raw_files,
@@ -220,6 +232,16 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
 
     file_handler = FILEHANDLER()
     file_handler.read_directory_ispy(params.star_input_folder, None, None)
+
+    if params.only_flux:
+        params.do_flux = True
+        params.do_cubes = False
+        params.do_angles = False
+
+    if params.only_angles:
+        params.do_flux = False
+        params.do_cubes = False
+        params.do_angles = True
 
     if isinstance(ref_cubes_dict, dict) and params.star_name in ref_cubes_dict.keys():
         if isinstance(ref_cubes_dict[params.star_name], dict):
@@ -274,30 +296,33 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
 
         if len(all_sky_files) == 0:
             logging.warning('no sky files found for {} {}'.format(params.star_name, L_or_R))
+            params.sky_files_exist = False
         
         elif isinstance(all_sky_files, list):
             logging.info('found {} sky files for {} {}'.format(len(all_sky_files), params.star_name, L_or_R))
             wrappers.make_mastersky_wrapper(all_sky_files, params)
             params.sky_files_exist = True
  
-    logging.info('creating flux files')
+    
+    if params.do_flux:
+        logging.info('creating flux files')
 
-    for L_or_R in ['LEFT','RIGHT']:       
+        for L_or_R in ['LEFT','RIGHT']:       
 
-        stage3_output_folder = os.path.join(params.star_output_folder, L_or_R.lower(), 'raw_files')
-        params.L_or_R = L_or_R
-        input_files = file_handler.get_files('flux', None, params.stage2_output_folder, prefix=L_or_R)
+            stage3_output_folder = os.path.join(params.star_output_folder, L_or_R.lower(), 'raw_files')
+            params.L_or_R = L_or_R
+            input_files = file_handler.get_files('flux', None, params.stage2_output_folder, prefix=L_or_R)
 
-        if len(input_files) == 1:
-            output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + '_flux.fits')]
-        elif len(input_files) > 1:
+            if len(input_files) == 1:
+                output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + '_flux.fits')]
+            elif len(input_files) > 1:
 
-            output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + f'_flux_{i+1}.fits') for i in range(len(input_files))]
-        else:
-            raise ValueError('unkown number')
+                output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + f'_flux_{i+1}.fits') for i in range(len(input_files))]
+            else:
+                raise ValueError('unkown number')
 
-        for input_file, output_file in zip(input_files, output_files):
-            wrappers.create_flux_file_wrapper(input_file, output_file, exp_time_science, L_or_R, params)
+            for input_file, output_file in zip(input_files, output_files):
+                wrappers.create_flux_file_wrapper(input_file, output_file, exp_time_science, L_or_R, params)
 
     if params.only_flux:
         logging.info('only flux files are created, skipping the rest of the pre-processing')
@@ -320,10 +345,15 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
 
         # get the center from the starcenter files, take the first one thats taken 
         star_center_files = file_handler.get_files('star_center', None, params.stage2_output_folder, prefix=L_or_R)
-        shift_yx = wrappers.get_center_wrapper(star_center_files[0], params)
+        star_center_index = params.star_center_index if params.star_center_index < len(star_center_files) else 0
+
+        if star_center_index != params.star_center_index:
+            logging.warning('star center index {} is out of bounds for the number of star center files {}, using default index 0 instead'.format(params.star_center_index, len(star_center_files)))
+
+        shift_yx = wrappers.get_center_wrapper(star_center_files[star_center_index], params)
 
         # make the cubes
-        wrappers.make_the_cube_wrapper(input_files, centered_cube, output_angs, shift_yx, star_center_files[0], params)
+        wrappers.make_the_cube_wrapper(input_files, centered_cube, output_angs, shift_yx, star_center_files[star_center_index], params)
 
         logging.info('now onto the ref stars')
         
@@ -349,7 +379,7 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
                 logging.info('\t -> {}'.format(basename(file)))
 
             # make the cubes
-            wrappers.make_the_cube_wrapper(ref_star_input_files, ref_star_centered_cube, ref_star_output_angs, shift_yx, star_center_files[0], params)
+            wrappers.make_the_cube_wrapper(ref_star_input_files, ref_star_centered_cube, ref_star_output_angs, shift_yx, star_center_files[star_center_index], params)
 
     logging.info('Finished making the cubes')
 

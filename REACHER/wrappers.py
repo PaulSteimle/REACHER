@@ -24,17 +24,17 @@ from .plots import show_img, circular_aperture
 from . import routines
 
 
-def make_bad_pix_mask_wrapper(obs_run, params):
+def make_bad_pix_mask_wrapper(obs_night, params):
     """ Wrapper function to create a bad pixel mask from the dark files. It is important that the parameters object contains the correct DARK_DF dataframe.
     
-    obs_run : str
-        The observation run to create the bad pixel mask for.
+    obs_night : str
+        The observation night to create the bad pixel mask for.
     params : Parameters 
         The parameters object containing all settings. 
 
     """
-    params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_run))
-    darks = params.DARK_DF[(params.DARK_DF['obs_run']== obs_run)]['filepath']
+    params.bad_pix_mask_filepath = os.path.join(params.bad_pix_mask_folder, 'bad_pix_mask_{}.fits'.format(obs_night))
+    darks = params.DARK_DF[(params.DARK_DF['obs_night']== obs_night)]['filepath']
     
     routines.make_bad_pix_mask(darks.tolist(), params.bad_pix_mask_filepath, params.overwrite, coef=5)
     return
@@ -158,7 +158,7 @@ def make_the_cube_wrapper(all_science, output_file_cube, output_file_angs, shift
                             params.image_shift_library, params.image_shift_interpolation,
                             params.correct_anamorphism, params.sphere_anamorphic_ratio,
                             params.skip_dither_correction, params.nproc, params.n_sigma, params.box_radius,
-                            params.make_plots, params.overwrite, params.full_output)
+                            params.make_plots, params.overwrite, params.full_output, params.do_cubes, params.skip_cosmics)
     return 
 
 

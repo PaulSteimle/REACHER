@@ -21,28 +21,28 @@ class FILEHANDLER():
     def __init__(self):
         pass
 
-    def read_directory(self, input_dir):
-        """Read the directory and return all files."""
+    # def read_directory(self, input_dir):
+    #     """Read the directory and return all files."""
 
-        self.main_dir = input_dir
-        self.output_folder = None
+    #     self.main_dir = input_dir
+    #     self.output_folder = None
 
-        self.all_files = glob(join(self.main_dir,'*.fits'))
-        self.all_files.sort()
+    #     self.all_files = glob(join(self.main_dir,'*.fits'))
+    #     self.all_files.sort()
 
-        self.flat = [os.path.basename(f) for f in self.all_files if 'FLAT' in os.path.basename(f) and '2023-07-24' in os.path.basename(f)]
-        self.science = [os.path.basename(f) for f in self.all_files if 'SCIENCE' in os.path.basename(f)]
-        self.flux = [os.path.basename(f) for f in self.all_files if 'FLUX' in os.path.basename(f)]
-        self.dark = [os.path.basename(f) for f in self.all_files if 'DARK' in os.path.basename(f)]
-        self.star_center = [os.path.basename(f) for f in self.all_files if 'CENTER' in os.path.basename(f)]
+    #     self.flat = [basename(f) for f in self.all_files if 'FLAT' in basename(f)]
+    #     self.science = [basename(f) for f in self.all_files if 'SCIENCE' in basename(f)]
+    #     self.flux = [basename(f) for f in self.all_files if 'FLUX' in basename(f)]
+    #     self.dark = [basename(f) for f in self.all_files if 'DARK' in basename(f)]
+    #     self.star_center = [basename(f) for f in self.all_files if 'CENTER' in basename(f)]
 
-        self.flat.sort()
-        self.science.sort()
-        self.flux.sort()
-        self.dark.sort()
-        self.star_center.sort()
+    #     self.flat.sort()
+    #     self.science.sort()
+    #     self.flux.sort()
+    #     self.dark.sort()
+    #     self.star_center.sort()
 
-        return
+    #     return
 
 
     def read_directory_ispy(self, science_dir, flats, darks):
@@ -52,10 +52,10 @@ class FILEHANDLER():
         self.all_files.sort()
 
 
-        self.science = [os.path.basename(f) for f in self.all_files if 'SCIENCE' in os.path.basename(f)]
-        self.flux = [os.path.basename(f) for f in self.all_files if 'FLUX' in os.path.basename(f)]
-        self.star_center = [os.path.basename(f) for f in self.all_files if 'CENTER' in os.path.basename(f)]
-        self.sky = [os.path.basename(f) for f in self.all_files if 'SKY' in os.path.basename(f)]
+        self.science = [basename(f) for f in self.all_files if 'SCIENCE' in basename(f)]
+        self.flux = [basename(f) for f in self.all_files if 'FLUX' in basename(f)]
+        self.star_center = [basename(f) for f in self.all_files if 'CENTER' in basename(f)]
+        self.sky = [basename(f) for f in self.all_files if 'SKY' in basename(f)]
         self.flux.sort()
         self.science.sort()
         self.star_center.sort()
