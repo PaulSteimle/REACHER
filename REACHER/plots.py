@@ -330,15 +330,4 @@ def show_img(img, xlim=None, ylim=None, minper=1, maxper=99, show_center=False, 
                                      ' same dimensions als image list')
 
     return
-
-
-
-
-if __name__ == '__main__':
-    from astropy.io import fits
-    from os.path import join, basename
-
-    img = fits.getdata('/data/beegfs/astro-storage/groups/beuther/pasteimle/ISPY_reduced_cubes_new/master_dark/master_dark_2023-03_2.0.fits')
-    print(img.shape)
-    show_img(img)
-    plt.savefig('/home/pasteimle/code/ispy/SIRP/test.png')
+    
