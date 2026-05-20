@@ -1,0 +1,13 @@
+# Runtime dependencies for REACHER.
+# Versions are pinned to the working REACHER_env (Python 3.8.20) and
+# constrained to known-good ranges. vip-hci is pinned tightly
+
+numpy>=1.24,<2
+scipy>=1.10
+pandas>=2.0
+astropy>=5.2
+vip-hci==1.6.6
+photutils>=1.8
+matplotlib>=3.7
+opencv-python>=4.5
+bottleneck>=1.3
