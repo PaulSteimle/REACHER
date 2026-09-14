@@ -4,6 +4,8 @@ import shutil
 from glob import glob
 from multiprocessing import Pool
 import pandas as pd
+from .misc import subtract_one_day
+
 
 def get_info(files, rename_dict):
 
@@ -14,76 +16,83 @@ def get_info(files, rename_dict):
 
     for file in files:
         header = fits.getheader(file)
-    
+        print('reading file: {}'.format(file) )
         try:
-            object = header['OBJECT']
 
-            if object.strip() == '':
-                return
+            # first check if these are all IRDIS files and not e.g. IFS
+            ARM = header['HIERARCH ESO SEQ ARM']
+            if ARM != 'IRDIS':
+                continue
+
+            _object = header['OBJECT']
+
+            # for some reason some files are correupted and have no OBJECT keyword, so we skip those files
+            if _object.strip() == '':
+                continue
         
             exp_time = header['EXPTIME']
             obs_date = header['DATE-OBS'].split('T')[0]
             obs_time = header['DATE-OBS'].split('T')[1]
 
             if int(obs_time[:2]) < 14:
-                obs_night = obs_date[:8] + str(int(obs_date[8:11])-1).zfill(2)  
+                obs_night = subtract_one_day(obs_date)
             else: 
                 obs_night = obs_date
 
             filter_name = header['HIERARCH ESO INS COMB IFLT']
             nd_filter = header['HIERARCH ESO INS4 FILT2 NAME']
-            type = header['HIERARCH ESO DPR TYPE']
+            _type = header['HIERARCH ESO DPR TYPE']
 
         except KeyError as e:
             print(f"KeyError: {e} in file {file}")
             print(header)
             return
 
-        if type == 'OBJECT':
-            type = 'SCIENCE'
-        elif 'OBJECT' in type:
-            type = type.replace('OBJECT,','')
-        if 'DARK,BACKGROUND' in type:
-            type = type.replace('DARK,BACKGROUND','DARK')
+        if _type == 'OBJECT':
+            _type = 'SCIENCE'
+        elif 'OBJECT' in _type:
+            _type = _type.replace('OBJECT,','')
+        if 'DARK,BACKGROUND' in _type:
+            _type = _type.replace('DARK,BACKGROUND','DARK')
 
-        if 'DARK,BACKGROUND' in object:
-            object = object.replace('DARK,BACKGROUND','DARK')  
+        if 'DARK,BACKGROUND' in _object:
+            _object = _object.replace('DARK,BACKGROUND','DARK')  
 
 
         for string in ['DARK,',',LAMP','LAMP,']: #,
-            if string in type:
-                type = type.replace(string, '')
-            if string in object:
-                object = object.replace(string, '')
+            if string in _type:
+                _type = _type.replace(string, '')
+            if string in _object:
+                _object = _object.replace(string, '')
 
-        object = object.replace(' ','')    
+        _object = _object.replace(' ','')    
 
-        if object in rename_dict:
-            object = rename_dict[object]
+        if _object in rename_dict:
+            _object = rename_dict[_object]
 
-
-        folderpath = os.path.join(object, 'IRDIS')
+        folderpath = os.path.join(_object, 'IRDIS')
         folderpath = os.path.join(folderpath, obs_night)
 
         folderpath = os.path.join(folderpath, filter_name)
 
-        filepath = os.path.join(folderpath, type + '_' + os.path.basename(file))
+        filepath = os.path.join(folderpath, _type + '_' + os.path.basename(file))
 
 
         DF_i = pd.DataFrame({
             "orig_file": [file],
-            "object": [object],
+            "object": [_object],
             "exp_time": [exp_time],
             "obs_night": [obs_night],
             "filter_name": [filter_name],
             "nd_filter": [nd_filter],
-            "type": [type],
+            "type": [_type],
             "filepath": [filepath],
             "folderpath": [folderpath],})
 
         DF = pd.concat([DF, DF_i], ignore_index=True)
-    
+
     DF = DF.sort_values(by=["object", "obs_night", "filter_name", "exp_time", "orig_file"], ascending=[True, True, True, True, True])
+    
     return DF
 
 
@@ -97,7 +106,6 @@ def move_files_from_download_dir(download_directory, new_directory, rename_dict)
     """
 
     all_files = glob(os.path.join(download_directory, 'SPHER*.fits'))
-
     DF = get_info(all_files, rename_dict)
 
     DF = DF[DF['object'] != 'OBJECT']
@@ -107,6 +115,7 @@ def move_files_from_download_dir(download_directory, new_directory, rename_dict)
         os.makedirs(full_path, exist_ok=True)
 
     i = 0 
+    print('Copying files to new directory...')
     for orig_file, filepath in zip(DF['orig_file'],DF['filepath'].to_list()):
         if i % 100 == 0:
             print(i)

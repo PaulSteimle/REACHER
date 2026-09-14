@@ -5,3 +5,4 @@ from .irdis_filters import get_filter_path
 from .misc import setup_logging, grab_all_files, return_csv_files, list_directory
 from .params import Parameters
 from .download_data import move_files_from_download_dir
+from ._version import __version__

@@ -10,6 +10,28 @@ from os.path import basename, join
 import numpy as np
 from shutil import copy2
 from glob import glob 
+from datetime import datetime, timedelta
+
+
+def subtract_one_day(input_date):
+    """
+    Subtracts 1 day from the input date.
+
+    Args:
+        input_date: A date string (e.g. "2026-08-31"), a datetime object,
+                    or a date object.
+
+    Returns:
+        A datetime object representing the previous day.
+    """
+    if isinstance(input_date, str):
+        input_date = datetime.strptime(input_date, "%Y-%m-%d")
+
+    return (input_date - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+months = {'01':'31', '02':'28', '03':'31', '04':'30', '05':'31', '06':'30', '07':'31', '08':'31', '09':'30', '10':'31', '11':'30', '12':'31'}
+
 
 def list_directory(path):
     return [f for f in os.listdir(path) if not '.DS' in f and not '._.DS' in f]
@@ -260,7 +282,12 @@ def find_calib_files(STAR_DF, params, calib_type='none'):
         filter_name = row['filter']
         exp_time = row['exp_time']
         nd_filter = row['nd_filter']
-        obs_night_JD = Time(obs_night + 'T00:00:00.000', format='isot', scale='utc').jd
+        try:
+            obs_night_JD = Time(obs_night + 'T00:00:00.000', format='isot', scale='utc').jd
+        except:
+            month = obs_night.split('-')[1]
+            days = months[month]
+            obs_night_JD = Time(obs_night[:4] + '-' + month + '-' + days + 'T00:00:00.000', format='isot', scale='utc').jd
 
         # 1. Try to associate the calibration files that should be valid for the same obs night, 
         # 2. If same night calib files do not exist try to find the nearest one in time that is within the validity threshold. 
@@ -294,15 +321,14 @@ def find_calib_files(STAR_DF, params, calib_type='none'):
                 nearest_idx = np.argmin(np.abs(np.array(obs_night_list) - obs_night_JD))
                 nearest_time =  np.min(np.abs(np.array(obs_night_list) - obs_night_JD))
                 if nearest_time < params.calib_valdity_threshold:
-
                     logging.warning('Master dark file {} does not exist. Using nearest master dark file {} which is {} days apart.'.format('master_dark_{}_{}.fits'.format(obs_night, exp_time), master_dark_list[nearest_idx], nearest_time))
                     master_dark_filepath = master_dark_list[nearest_idx]
 
         # this is neccessary as in some cases flats do not have darks, however there are enough flats with darks to still produce a masterflat. Flats without darks will be skipped in the processing
         if (stage == 3 and master_dark_filepath == 'None') or master_dark_filepath != 'None':
               STAR_DF.loc[index, 'master_dark'] = master_dark_filepath       
-
         else:
+            print('Master_dark_list: {}'.format(master_dark_list))
             raise FileExistsError('master dark file does not exist: {}'.format(master_dark_filepath))
                 
         # stage 4: up to flat 

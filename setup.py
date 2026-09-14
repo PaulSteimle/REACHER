@@ -1,8 +1,9 @@
 from setuptools import setup, find_packages
+import REACHER
 
 setup(
     name='REACHER',
-    version='0.2.0',
+    version= REACHER.__version__,
     description='Pre-processing pipeline for SPHERE IRDIS Dual Band Imaging',
     author='Paul Steimle',
     author_email='pasteimle@mpia.de',

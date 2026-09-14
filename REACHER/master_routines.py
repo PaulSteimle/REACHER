@@ -1,3 +1,4 @@
+from ast import If
 import os
 import time
 import logging
@@ -316,7 +317,6 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
             if len(input_files) == 1:
                 output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + '_flux.fits')]
             elif len(input_files) > 1:
-
                 output_files = [os.path.join(stage3_output_folder, L_or_R.lower() + f'_flux_{i+1}.fits') for i in range(len(input_files))]
             else:
                 raise ValueError('unkown number')
@@ -345,15 +345,32 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
 
         # get the center from the starcenter files, take the first one thats taken 
         star_center_files = file_handler.get_files('star_center', None, params.stage2_output_folder, prefix=L_or_R)
-        star_center_index = params.star_center_index if params.star_center_index < len(star_center_files) else 0
+        
+        # check what star center files to use based on the params.star_center_index parameter. 
+        
+        # If it is a list, we use the specified indices. 
+        if isinstance(params.star_center_index, list):
+            center_files_index_2_use = params.star_center_index
+        
+        # If it is -1, we use all star center files. 
+        elif params.star_center_index == -1 and len(star_center_files) > 1:
+            logging.warning('star center index is set to -1, meaning all star center files are used!')
+            center_files_index_2_use = list(range(len(star_center_files)))
 
-        if star_center_index != params.star_center_index:
-            logging.warning('star center index {} is out of bounds for the number of star center files {}, using default index 0 instead'.format(params.star_center_index, len(star_center_files)))
+        # If it is an int, we use the specified index, if it is out of bounds we use the default index 0 and print a warning.
+        elif isinstance(params.star_center_index, int):
 
-        shift_yx = wrappers.get_center_wrapper(star_center_files[star_center_index], params)
-
+            # here we check if the specified index is within the bounds of the number of star center files, if not we print a warning and use the default index 0.
+            if params.star_center_index < len(star_center_files):
+                center_files_index_2_use = [params.star_center_index]
+            else: 
+                logging.warning('star center index {} is out of bounds for the number of star center files {}, using default index 0 instead'.format(params.star_center_index, len(star_center_files)))
+                center_files_index_2_use = [0] 
+    
+        shift_yx = [(star_center_files[i], wrappers.get_center_wrapper(star_center_files[i], params)) for i in center_files_index_2_use]
+    
         # make the cubes
-        wrappers.make_the_cube_wrapper(input_files, centered_cube, output_angs, shift_yx, star_center_files[star_center_index], params)
+        wrappers.make_the_cube_wrapper(input_files, centered_cube, output_angs, shift_yx, params)
 
         logging.info('now onto the ref stars')
         
@@ -379,7 +396,7 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
                 logging.info('\t -> {}'.format(basename(file)))
 
             # make the cubes
-            wrappers.make_the_cube_wrapper(ref_star_input_files, ref_star_centered_cube, ref_star_output_angs, shift_yx, star_center_files[star_center_index], params)
+            wrappers.make_the_cube_wrapper(ref_star_input_files, ref_star_centered_cube, ref_star_output_angs, shift_yx, params)
 
     logging.info('Finished making the cubes')
 
@@ -395,7 +412,6 @@ def centering_and_bad_pix_correction(params, ref_cubes_dict=None):
     logging.info('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     return 
-
 
 
 def cleanup_all_folders(params):

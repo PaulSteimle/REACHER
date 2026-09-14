@@ -10,8 +10,9 @@ import shutil
 import matplotlib.pyplot as plt
 from photutils.centroids import centroid_1dg, centroid_quadratic, centroid_2dg
 from os.path import join, basename
+from datetime import date, datetime
 
-from scipy import ndimage
+from scipy import ndimage, optimize
 from astropy.io import fits 
 from astropy.time import Time
 from glob import glob 
@@ -22,6 +23,8 @@ from vip_hci.var import fit_2dgaussian, frame_center
 from .misc import sanitize_header
 from .irdis_filters import get_filter_path 
 from .plots import show_img, circular_aperture
+from ._version import __version__
+
 
 
 def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
@@ -36,10 +39,13 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
     logging.info('making bad pixel mask {}'.format(basename(bad_pix_mask_filepath)))
 
     all_dark_file_data = []
-    
+    header = None
+
     for file in dark_file_list:
         hdul = fits.open(file)
         cube = hdul[0].data
+        if header is None: 
+            header = hdul[0].header
         if cube.ndim == 2:
             if cube.shape[0] == 2048:
                 pass
@@ -83,6 +89,15 @@ def make_bad_pix_mask(dark_file_list, bad_pix_mask_filepath, overwrite, coef=5):
     hdu = fits.PrimaryHDU(data=bpx_mask)
     hdul = fits.HDUList([hdu])
 
+    header = sanitize_header(header)
+    header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    header['HIERARCH RCHR TYPE'] = ('bad pixel mask', 'class of the file')
+
+    for i, file in enumerate(dark_file_list):
+        header['HIERARCH RCHR DARK{}'.format(i)] = (os.path.basename(file), 'dark file that was used in creation')
+
+    hdul[0].header = header
     hdul.writeto(bad_pix_mask_filepath, overwrite=True)
 
     return
@@ -108,6 +123,11 @@ def make_IRDIS_clump_mask(clump_mask_filepath):
 
     hdu = fits.PrimaryHDU(data=clump_mask)
     hdul = fits.HDUList([hdu])
+
+    hdul[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul[0].header['HIERARCH RCHR TYPE'] = ('IRDIS Clump mask', 'class of the file')
+
     hdul.writeto(clump_mask_filepath, overwrite=True)
 
     return
@@ -210,11 +230,14 @@ def make_master_dark(dark_filepaths, masterdark_filepath, bad_pix_mask_filepath,
 
     hdu = fits.PrimaryHDU(data=master_dark_bdpix_corr)
     hdul_masterdark = fits.HDUList([hdu])
+
     hdul_masterdark[0].header = sanitize_header(header_master_dark)
-    hdul_masterdark[0].header['HISTORY'] = 'MASTER DARK'
+    hdul_masterdark[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul_masterdark[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul_masterdark[0].header['HIERARCH RCHR TYPE'] = ('MASTER DARK', 'class of the file')
 
     for i, file in enumerate([os.path.basename(f) for f in dark_filepaths]):
-        hdul_masterdark[0].header['DARK{}'.format(i)] = file
+        hdul_masterdark[0].header['HIERARCH RCHR DARK{}'.format(i)] = (file, 'file that was used in the creation of this master dark.')
 
     hdul_masterdark.writeto(masterdark_filepath, overwrite=True)
     hdul_masterdark.close()
@@ -256,8 +279,11 @@ def correct_for_dark(input_file, output_file, master_dark_filepath, overwrite):
     hdul_minus_dark = fits.HDUList([hdu])
 
     hdul_minus_dark[0].header = sanitize_header(science_header)
-    hdul_minus_dark[0].header['HISTORY'] = 'DARK SUBTRACTED'
-    hdul_minus_dark[0].header[f'MASTDARK'] = os.path.basename(master_dark_filepath)
+    
+    hdul_minus_dark[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul_minus_dark[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul_minus_dark[0].header['HIERARCH RCHR CAL STATE'] = ('DARK SUBTRACTED', 'Calibration state of the file')
+    hdul_minus_dark[0].header['HIERARCH RCHR MASTDARK'] = (os.path.basename(master_dark_filepath), 'master dark file used for subtraction')
 
     hdul_minus_dark.writeto(output_file, overwrite=True)
     hdul_minus_dark.close()
@@ -336,10 +362,14 @@ def make_master_flat(flats_list, master_darks_list, masterflat_filepath, bad_pix
 
     hdu = fits.PrimaryHDU(data=masked_master_flat_norm)
     hdul_masterflat = fits.HDUList([hdu])
+
     hdul_masterflat[0].header = header_master_flat
-    hdul_masterflat[0].header['HISTORY'] = 'MASTER FLAT'
+    hdul_masterflat[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul_masterflat[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul_masterflat[0].header['HIERARCH RCHR TYPE'] = ('MASTER FLAT', 'class of the file')
+
     for i, file in enumerate([os.path.basename(f) for f in flats_list]):
-        hdul_masterflat[0].header['FLAT{}'.format(i)] = file
+        hdul_masterflat[0].header['HIERARCH RCHR FLAT{}'.format(i)] = (file, 'flat file used in the creation of this master flat.')
 
     hdul_masterflat.writeto(masterflat_filepath, overwrite=True)
     hdul_masterflat.close()
@@ -432,11 +462,15 @@ def make_master_bkg(bkg_filepaths, params, plot=False):
     hdu = fits.PrimaryHDU(data=masked_master_bkg_flat_corr)
     hdul_masterbkg = fits.HDUList([hdu])
     hdul_masterbkg[0].header = header_master_bkg
-    hdul_masterbkg[0].header['HISTORY'] = 'MASTER BACKGROUND'
-    hdul_masterbkg[0].header['BKG counts sum'] = master_bkg_counts_sum
-    hdul_masterbkg[0].header['BKG counts median'] = master_bkg_counts_median
+
+    hdul_masterbkg[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul_masterbkg[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul_masterbkg[0].header['HIERARCH RCHR TYPE'] = ('MASTER BACKGROUND', 'class of the file')
+
+    hdul_masterbkg[0].header['HIERARCH RCHR BKG SUM CNTS'] = (master_bkg_counts_sum, 'Sum of all the ADU counts in the background')
+    hdul_masterbkg[0].header['HIERARCH RCHR BKG MED CNTS'] = (master_bkg_counts_median, 'Median of all the ADU counts in the background')
     for i, file in enumerate([os.path.basename(f) for f in bkg_filepaths]):
-        hdul_masterbkg[0].header['BKG{}'.format(i)] = file
+        hdul_masterbkg[0].header['HIERARCH RCHR BKG{}'.format(i)] = (file, 'bkg file used in the creation of this master background.')
 
     hdul_masterbkg.writeto(master_bkg_filepath, overwrite=True)
     hdul_masterbkg.close()
@@ -481,16 +515,16 @@ def calibrate_files(input_file, output_file, masterdark_filepath, masterflat_fil
     hdul_flat_corr = fits.HDUList([hdu])
     hdul_flat_corr[0].header = sanitize_header(hdul[0].header)
 
-    hdul_flat_corr[0].header['HISTORY1'] = 'DARK CORRECTED'
-    hdul_flat_corr[0].header['HISTORY2'] = 'FLAT CORRECTED'
-    hdul_flat_corr[0].header['HISTORY3'] = 'BAD PIXEL CORRECTED'
-    hdul_flat_corr[0].header['MASTDARK'] = os.path.basename(masterdark_filepath)
-    hdul_flat_corr[0].header['MASTFLAT'] = os.path.basename(masterflat_filepath)
-    hdul_flat_corr[0].header['BADPIX_FILE'] = os.path.basename(bad_pix_mask_filepath)
+    hdul_flat_corr[0].header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    hdul_flat_corr[0].header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    hdul_flat_corr[0].header['HIERARCH RCHR HISTORY'] = ('corrected', 'Cube has been dark, flat and bad pixel corrected using the following files')
+    hdul_flat_corr[0].header['HIERARCH RCHR MASTDARK'] = (os.path.basename(masterdark_filepath), 'Name of Masterdark file used for calibration')
+    hdul_flat_corr[0].header['HIERARCH RCHR MASTFLAT'] = (os.path.basename(masterflat_filepath), 'Name of Masterflat file used for calibration')
+    hdul_flat_corr[0].header['HIERARCH RCHR BADPIX_FILE'] = (os.path.basename(bad_pix_mask_filepath), 'Name of bad pixel mask file used for correction')
 
     if master_background_filepath is not None:
-        hdul_flat_corr[0].header['HISTORY4'] = 'INSTRUMENTAL BKG CORRECTED'
-        hdul_flat_corr[0].header['MASTERBKGND'] = os.path.basename(master_background_filepath)
+        hdul_flat_corr[0].header['HIERARCH RCHR HISTORY'] = ('corrected', 'Cube has been dark, flat, bad pixel, and background corrected using the following files')
+        hdul_flat_corr[0].header['HIERARCH RCHR MASTERBKGND'] = (os.path.basename(master_background_filepath), 'Name of master background file used for correction')
 
     hdul_flat_corr.writeto(output_file, overwrite=True)
     hdul_flat_corr.close()
@@ -747,7 +781,7 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
     if sky_files_exist:
         try: 
             master_sky = fits.getdata(master_sky_filepath)
-            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
+            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['HIERARCH RCHR MEANTEMP']
             master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
         except Exception as e:
             logging.error('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
@@ -769,29 +803,32 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
     # stacked_flux_image = stacked_flux_image - median_sky_bkg
 
     # fit a gauss to find the center 
-    med_y, med_x = fit_2dgaussian(stacked_flux_image, crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=False)
-    
-    if np.isnan(med_y) or np.isnan(med_x):
-        med_y, med_x = fit_2dgaussian(stacked_flux_image, crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=True)
-
+    try:
+        med_y, med_x = fit_2dgaussian(np.nan_to_num(stacked_flux_image), crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=False)
+        
+        if np.isnan(med_y) or np.isnan(med_x):
+            med_y, med_x = fit_2dgaussian(np.nan_to_num(stacked_flux_image), crop=True, cent=star_loc, cropsize=cropsize, threshold=True, sigfactor=4, full_output=False, debug=True)
+    except Exception as e:
+        med_y, med_x = np.nan, np.nan
 
     if np.isnan(med_y) or np.isnan(med_x):
         plot_dir = os.path.join(os.path.dirname(output_file),  'flux_pngs')
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 
-        show_img(rescaled_image, minper=1, maxper=99, size =5)
+        show_img(stacked_flux_image, minper=1, maxper=99, size =5)
         plt.scatter(20,20, marker='x', color='red', s=100)
         plt.savefig(os.path.join(plot_dir,os.path.basename(output_file).replace('.fits', '.pdf')), bbox_inches='tight', dpi=120)
         plt.close()
 
-        show_img(stacked_flux_image * exp_time_ratio / nd_ratio, minper=1, maxper=99, size = 5)
-        plt.scatter(med_x, med_y, marker='x', color='red', s=100)
-        plt.xlim(med_x - 20, med_x  +20)
-        plt.ylim(med_y - 20, med_y  +20)
-        plt.savefig(os.path.join(plot_dir,os.path.basename(output_file).replace('.fits', '2.pdf')), bbox_inches='tight', dpi=120)
-        plt.close()
+        # show_img(stacked_flux_image * exp_time_ratio / nd_ratio, minper=1, maxper=99, size = 5)
+        # plt.scatter(med_x, med_y, marker='x', color='red', s=100)
+        # plt.xlim(med_x - 20, med_x  +20)
+        # plt.ylim(med_y - 20, med_y  +20)
+        # plt.savefig(os.path.join(plot_dir,os.path.basename(output_file).replace('.fits', '2.pdf')), bbox_inches='tight', dpi=120)
+        # plt.close()
 
+        med_y, med_x = 512, 512
 
     #cut out the center of the flux image
     # divide the shift in integer and float
@@ -823,6 +860,8 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
     # background[30:70,30:70] = np.nan
 
     med_background = np.nanmedian(background)
+    if np.isnan(med_background):
+        med_background = 0
     logging.info('\t median sky background in file {}: {}'.format(os.path.basename(output_file), med_background))
 
     int_centered_image = int_centered_image - med_background
@@ -852,9 +891,12 @@ def create_flux_file(input_file, output_file, science_exp_time, L_or_R,
     hdu_flux = fits.PrimaryHDU(data=rescaled_image)
     hdul_flux = fits.HDUList([hdu_flux])
 
-    header['EXPTIMERATIO'] = exp_time_ratio
-    header['ND_RATIO'] = 1/nd_ratio
-    header['BACKGROUND'] = med_background
+    header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    header['HIERARCH RCHR TYPE'] = ('flux file', 'class of the file')
+    header['HIERARCH RCHR EXPTIMERATIO'] = (exp_time_ratio, 'Ratio between the science exposure time and the exposure time of this file')
+    header['HIERARCH RCHR ND_RATIO'] = (1/nd_ratio, 'Ratio to correct for the ND filter, needed to go back to e- per pixel')
+    header['HIERARCH RCHR BACKGROUND'] = (med_background, 'Median sky background measured in the file')
 
     hdul_flux[0].header = header
     hdul_flux.writeto(output_file, overwrite=True)
@@ -881,11 +923,25 @@ def get_satspots(input_file):
     DF_Frame = DF[DF['frames'] == filename]
     
     centers = [ (DF_Frame['x{}'.format(f+1)].values[0], DF_Frame['y{}'.format(f+1)].values[0]) for f in range(4)]
-        
+    
     return centers
 
 
 def get_center(input_file, make_plots, center = None):
+    """ function to extract the exact center of the star behin the coronagraph using the satellite spots, if given in the csv file, 
+        otherwise using the default positions based on the center of the frame. 
+        The function returns the shift in x and y direction that needs to be applied to center the star on the center of the frame.
+    
+    
+        input_file: str
+            The file path to the input cube for which the center needs to be determined.
+        make_plots: bool
+            Whether to make diagnostic plots of the centering process.
+        center: tuple or None
+            If given, this is the initial center that will be used for the satellite spot positions,
+        
+        
+    """
 
     logging.info('\t -> getting center from file {}'.format(os.path.basename(input_file)))
     sat_spots = get_satspots(input_file)
@@ -893,31 +949,27 @@ def get_center(input_file, make_plots, center = None):
     # first get the data 
     data = np.nan_to_num(fits.getdata(input_file))
 
-    # for now cut away the edges to remove the bad pixels
-    cut_size = 20 
-    data = data[:, cut_size:-cut_size, cut_size:-cut_size]
-
     # creat a median image of the cube
     image = np.nanmedian(data, axis=0)
 
     # try to find the center using centroid_1dg
     if center is None:
         data_blurred = ndimage.gaussian_filter(image.astype(float), sigma=10)
-        center = centroid_1dg(data_blurred)
+        center = centroid_1dg(data_blurred[350:-350,350:-350])
+        center += 350
 
     # find the center of the frame
     cy, cx = frame_center(image)
 
     # and try to use the now centered image with the sattelite spots
     if sat_spots is None or sat_spots == [(0,0), (0,0), (0,0), (0,0)]:
-
+        logging.warning('No satellite spots found in the csv file, using default satellite spot positions based on the center of the frame')
         sat_spots = np.array([ [-35, 35], [35, 35], [-35,-35], [35, -35]]) + center
         sat_spots_input = [(f[0], f[1]) for f in sat_spots]
     
     # if the sat_spots are given, we need to take of the same amount that we cut away at the beginning
     else:
-         sat_spots_input = [(f[0] -cut_size, f[1] -cut_size) for f in sat_spots]
-
+         sat_spots_input = [(f[0], f[1]) for f in sat_spots]
 
     string = ', '.join(['s{:1.0f} = ({:1.1f}, {:1.1f})'.format(i, f[0], f[1]) for i, f in enumerate(sat_spots_input)])
     logging.info('Using satellite spots at: {}'.format(string))
@@ -943,18 +995,15 @@ def get_center(input_file, make_plots, center = None):
         for j, xy in enumerate(sat_spots_input):
             plt.scatter(xy[0], xy[1], color=f'C{j}', s=10, label=f'xy {j}')
         plt.legend()
-        #plt.savefig('test.png')
         plt.close()
 
         # the shifted image with centers
         show_img(shifted_image, minper=0.1, maxper=99.9, xlim=[cx-100,cx+100], ylim=[cy-100,cy+100], size = 2)
         plt.scatter(cx, cy, color='black', s=10, label='center frame', marker = '+')
         plt.legend()
-        #plt.savefig('test.png')
         plt.close()
 
-
-    return center_shifty, center_shiftx
+    return (center_shifty, center_shiftx)
 
 
 def make_mastersky(sky_files_list, master_sky_filepath, owerwrite):
@@ -997,13 +1046,20 @@ def make_mastersky(sky_files_list, master_sky_filepath, owerwrite):
 
     hdu = fits.PrimaryHDU(data=median_sky)
     hdul = fits.HDUList([hdu])
-    hdul[0].header = sanitize_header(sky_header)
+    sky_header = sanitize_header(sky_header)
 
-    hdul[0].header['MEANTEMP'] = np.mean(sky_temps)
-    for temps in sky_temps:
-        hdul[0].header['SKYTEMP'] = temps
-    hdul[0].header['HISTORY'] = 'MASTER SKY'
+    sky_header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    sky_header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    sky_header['HIERARCH RCHR TYPE'] = ('MASTER SKY', 'class of the file')
 
+    for i, file in enumerate(sky_files_list):
+        sky_header['HIERARCH RCHR SKY{}'.format(i)] = (os.path.basename(file), 'sky file used')
+    for i, temps in enumerate(sky_temps):
+        sky_header['HIERARCH RCHR SKYTEMP{}'.format(i)] = temps
+
+    sky_header['HIERARCH RCHR MEANTEMP'] = np.mean(sky_temps)
+
+    hdul[0].header = sky_header
     hdul.writeto(master_sky_filepath, overwrite=True)
     hdul.close()
 
@@ -1169,7 +1225,7 @@ def correct_anamorphism_wrapper(input_frame, scaling, imlib, interpolation):
     return frame_px_resampling(input_frame, scaling, imlib=imlib, interpolation=interpolation, keep_center=True)
 
 
-def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_center_file,
+def make_the_cube(all_science, output_file_cube, output_file_angs, shift,
                   star_name, obs_night, filter_name, subtract_median_science_sky_bkg,
                   sphere_offset, sphere_true_north_correction, sky_files_exist, master_sky_filepath,
                   image_shift_library, image_shift_interpolation,
@@ -1189,37 +1245,52 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     header_infos = pd.DataFrame(columns = ['file', 'start_angle', 'end_angle', 'dither_x', 'dither_y', 'n_frames'])
 
     logging.info('\t -> extracting the single exposures from the files into one cube')
+
+    obs_date_in_JD = Time(obs_night, format='iso', scale='utc').jd
+
     for file in all_science: 
         data = fits.getdata(file)
 
-        try:
-            # do the %360 as the angles range from -180 to 180 which gives issues when crossing the 180 line
-            header = fits.getheader(file)
-            angend = float(header['HIERARCH ESO TEL PARANG END'])
-            angstart = float(header['HIERARCH ESO TEL PARANG START'])
-            time_start = header['DATE-OBS'] # DATE-OBS : when the OB was started 
-            time_end = header['DATE'] # DATE : time when the file was written
-            dith_x = header['HIERARCH ESO INS1 DITH POSX']
-            dith_y = header['HIERARCH ESO INS1 DITH POSY']
-            temp = header['HIERARCH ESO INS4 TEMP449 VAL']
-            exp_time = header['EXPTIME']
-            
-        except KeyError as e:
-            logging.error(file)
-            raise KeyError(e)
+        # do the %360 as the angles range from -180 to 180 which gives issues when crossing the 180 line
+        header = fits.getheader(file)
+        angend = float(header['HIERARCH ESO TEL PARANG END'])
+        angstart = float(header['HIERARCH ESO TEL PARANG START'])
+        time_start = header['DATE-OBS'] # DATE-OBS : when the OB was started 
+        time_end = header['DATE'] # DATE : time when the file was written
+        dith_x = header['HIERARCH ESO INS1 DITH POSX']
+        dith_y = header['HIERARCH ESO INS1 DITH POSY']
+        temp = header['HIERARCH ESO INS4 TEMP449 VAL']
+        exp_time = header['EXPTIME']
 
         logging.info('\t\t -> file {} has {} frames from angle {} to {} deg'.format(os.path.basename(file), len(data), angstart, angend))
 
-        header_infos = pd.concat([header_infos,pd.DataFrame({
-                                                'file': [os.path.basename(file)],
-                                                'start_angle': [angstart],
-                                                'end_angle': [angend],
-                                                'dither_x': [dith_x],
-                                                'dither_y': [dith_y],
-                                                'n_frames': [len(data)],
-                                                'filter_temp': [temp],
-                                                'exp_time': [exp_time],
-                                                })],ignore_index=True)
+        single_exp_DF = pd.DataFrame({
+                                        'file': [os.path.basename(file)],
+                                        'start_angle': [angstart],
+                                        'end_angle': [angend],
+                                        'dither_x': [dith_x],
+                                        'dither_y': [dith_y],
+                                        'n_frames': [len(data)],
+                                        'filter_temp': [temp],
+                                        'exp_time': [exp_time],
+                                        })
+
+        if obs_date_in_JD < Time('2016-07-13', format='iso', scale='utc').jd:
+
+            tel_alt = header['HIERARCH ESO TEL ALT'] 
+            drot2_begin = header['HIERARCH ESO INS4 DROT2 BEGIN']
+
+            logging.warning('Observation date is before 2016-07-13, which means that the parallactic angles are wrong due to a known issue with the SPHERE derotator.')
+            logging.warning('This will be corrected according to the formula given in the SPHERE manual.') 
+
+            single_exp_DF['tel_alt'] = tel_alt
+            single_exp_DF['drot2_begin'] = drot2_begin
+
+            correction_TN = np.arctan(np.tan((tel_alt - 2 * drot2_begin) * np.pi / 180 ) ) * 180 / np.pi
+
+            single_exp_DF['true_north_correction'] = correction_TN
+
+        header_infos = pd.concat([header_infos, single_exp_DF], ignore_index=True)
 
         # check if the interval runs over the 180 deg border and changes sign,
         # in this case multipling start by end is negative since 1 value is negative 
@@ -1227,9 +1298,6 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         if angend * angstart < 0 and abs(angend) + abs(angstart) > 180:
             if angstart < 0: angstart = angstart % 360
             elif angend < 0: angend = angend % 360
-
-        #diff = abs(angstart - angend) / len(data) 
-        #angs_i = np.linspace(angstart + diff/2, angend - diff/2, len(data))
 
         angs_i = angstart + (angend - angstart) * (0.5+np.arange(len(data)))/len(data)
 
@@ -1243,6 +1311,11 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         angs_i += sphere_offset
         # add true north offset
         angs_i += sphere_true_north_correction
+
+        # if the data is affected by the true north issue, apply the correction
+        if obs_date_in_JD < Time('2016-07-13', format='iso', scale='utc').jd:
+            logging.info('Applying true north correction of {} deg to file {}'.format(correction_TN, os.path.basename(file)))
+            angs_i += correction_TN
 
         # make again sure angles are between 0 and 360 as the offsets could have pushed them out of this range
         angs_i = angs_i % 360
@@ -1307,7 +1380,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
     if sky_files_exist:
         try: 
             master_sky = fits.getdata(master_sky_filepath)
-            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['MEANTEMP']
+            mean_sky_filter_temp = fits.getheader(master_sky_filepath)['HIERARCH RCHR MEANTEMP']
             master_sky_exptime = fits.getheader(master_sky_filepath)['EXPTIME']
         except Exception as e:
             logging.error('Could not load master sky {}, please check if the file exists and contains the right data'.format(os.path.basename(master_sky_filepath)))
@@ -1337,14 +1410,85 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         plt.savefig(os.path.join(os.path.dirname(output_file_cube), 'dither_shifts.pdf'), format='pdf', dpi = 120)
         plt.close()
 
-    # now shift the cube to the center
-    center_shifty, center_shiftx = shift
+    # if there is only a single center file, then we assume that the same shift needs to be applied to all frames
+    if len(shift) == 1:
+        # now shift the cube to the center
+        center_shifty, center_shiftx = shift[0][1]
     
-    int_shift_x = int(np.floor(center_shiftx))
-    int_shift_y = int(np.floor(center_shifty))
+        int_shift_x = int(np.floor(center_shiftx))
+        int_shift_y = int(np.floor(center_shifty))
 
-    float_center_x = center_shiftx - int_shift_x
-    float_center_y = center_shifty - int_shift_y
+        float_center_x = center_shiftx - int_shift_x
+        float_center_y = center_shifty - int_shift_y
+
+        extracted_center_shiftx = [center_shiftx] 
+        extracted_center_shifty = [center_shifty] 
+        star_center_file = [shift[0][0]]
+
+
+    # otherwise we assume that the shift is determined multiple times. In this case we will extract the shifts for each frame and apply them individually
+    elif isinstance(shift, (np.ndarray, list)):
+        
+        # first collect them in the right order
+        star_center_file, center_times_mjd, extracted_center_shifty, extracted_center_shiftx = [], [], [], []
+        for i in range(len(shift)):          
+        
+            star_center_file.append(os.path.basename(shift[i][0]))
+            center_times_mjd.append(Time(shift[i][0].split('CENTER_SPHER.')[1].split('.fits')[0], format='isot', scale='utc').mjd)
+            extracted_center_shifty.append(shift[i][1][0])
+            extracted_center_shiftx.append(shift[i][1][1])
+
+        # we take the full image shift based on the first center frame:
+        int_shift_x = int(np.floor(extracted_center_shiftx[0]))
+        int_shift_y = int(np.floor(extracted_center_shifty[0]))
+
+        # we define a linear model to fit the shifts as a function of time, this is needed to be able to apply the shifts to all frames in the cube, since we only have the shifts for a subset of the frames
+        def linear_model(x, a, b):
+            return a * x + b
+
+        # set the starting point to be the first center frame, this is needed to avoid issues with the large numbers of the MJD times when fitting the linear model, since the shifts are expected to be small we can safely set the starting point to be the first center frame without losing generality
+        starting_time = np.min(center_times_mjd)
+
+        # fit the x and y coordinate sepeately 
+        popt_x, _ = optimize.curve_fit(linear_model, center_times_mjd - starting_time, extracted_center_shiftx)
+        popt_y, _ = optimize.curve_fit(linear_model, center_times_mjd - starting_time, extracted_center_shifty)
+
+        # and calcualte the shifts for all the frames
+        shifts_x = linear_model(all_times_mjd - starting_time, *popt_x)
+        shifts_y = linear_model(all_times_mjd - starting_time, *popt_y)
+
+        # we subtract the integer shift to get the subpixel shift that we will apply with the image shifting function, 
+        # this is needed to avoid issues with the large shifts when applying the image shifting function, 
+        # since the shifts are expected to be small we can safely subtract the integer shift without losing generality
+        float_center_x = shifts_x - int_shift_x
+        float_center_y = shifts_y - int_shift_y
+
+        if make_plots: 
+            
+            # lastly make the plots of the extracted shifts as a function of time to check if the linear model is a good fit and to check if there are any outliers in the extracted shifts,
+            # this is important to check since outliers can have a large impact on the final centering of the cube, and can lead to issues with the final analysis of the data, 
+            # such as false positives or missed detections of companions, so it is important to check the quality of the extracted shifts before applying them to the cube
+            dummy = np.linspace(np.min([np.min(center_times_mjd), np.min(all_times_mjd)]), np.max([np.max(center_times_mjd), np.max(all_times_mjd)]), 100)
+            dummy = dummy - starting_time
+
+            fig, ax = plt.subplots(2, 1, figsize=(10, 10), dpi = 120)
+
+            ax[0].scatter(center_times_mjd - starting_time, extracted_center_shifty, marker = 'x', label='extracted shifts')
+            ax[0].scatter(all_times_mjd - starting_time, shifts_y, marker = '.', label='applied shifts per frame')
+            ax[0].plot(dummy, linear_model(dummy, *popt_y), label='linear fit')
+
+            ax[1].scatter(center_times_mjd - starting_time, extracted_center_shiftx, marker = 'x')
+            ax[1].scatter(all_times_mjd - starting_time, shifts_x, marker = '.')
+            ax[1].plot(dummy, linear_model(dummy, *popt_x))
+
+            ax[0].set_ylabel('x coord shift in pixels')
+            ax[1].set_ylabel('y coord shift in pixels')
+            ax[1].set_xlabel('Time [MJD]')
+
+            ax[0].legend()
+            plt.savefig(os.path.join(os.path.dirname(output_file_cube), 'center_shifts.pdf'), format='pdf', dpi = 120)
+            plt.close()
+
 
     # first shift the center of the cube by the full integer number
     logging.info('\t -> centering the cube on a full pixel level')
@@ -1502,25 +1646,31 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
 
     # now save the cube
     logging.info('\t -> saving the cube to {}'.format(os.path.basename(output_file_cube)))
-    hdu2 = fits.PrimaryHDU(data=masked_cube)
-    hdul2 = fits.HDUList([hdu2])
-    header2 = fits.getheader(all_science[0])
+    sci_hdu = fits.PrimaryHDU(data=masked_cube)
+    sci_hdul = fits.HDUList([sci_hdu])
+    sci_header = fits.getheader(all_science[0])
+
+    # and write the header
+    sci_header['HIERARCH RCHR VERSION'] = (__version__, 'REACHER version that was used for the creation of this file.')
+    sci_header['HIERARCH RCHR PROC DATE'] = (datetime.now().isoformat()[:19], 'Date and time when the file was created.')
+    sci_header['HIERARCH RCHR TYPE'] = ('sci cube', 'class of the file')
 
     for i, file in enumerate(all_science):
-        header2['SCIENC{}'.format(i)] = os.path.basename(file)
+        sci_header['HIERARCH RCHR SCI{}'.format(i)] = (os.path.basename(file), 'file used to create this cube')
 
-    header2['CENTSTAR'] = os.path.basename(star_center_file)
-    header2['SHIFTX'] = np.mean(center_shiftx)
-    header2['SHIFTY'] = np.mean(center_shifty)
+    for i, file in enumerate(extracted_center_shiftx):
+        sci_header['HIERARCH RCHR CENTSTAR{}'.format(i)] = (os.path.basename(star_center_file[i]), 'file used to center this cube')
+        sci_header['HIERARCH RCHR SHIFTX{}'.format(i)] = (extracted_center_shiftx[i], '(pixel) in x extracted from the frame')
+        sci_header['HIERARCH RCHR SHIFTY{}'.format(i)] = (extracted_center_shifty[i], '(pixel) in y extracted from the frame')
 
     if sky_files_exist:
-        header2['MASTSKY'] = os.path.basename(master_sky_filepath)
-        header2['MNSKYTMP'] = mean_sky_filter_temp
+        sci_header['HIERARCH RCHR MASTSKY'] = (os.path.basename(master_sky_filepath), 'master sky file used')
+        sci_header['HIERARCH RCHR MNSKYTMP'] = (mean_sky_filter_temp, 'mean sky temperature')
 
-    hdul2[0].header = header2
+    sci_hdul[0].header = sci_header
 
-    hdul2.writeto(output_file_cube, overwrite=True)
-    hdul2.close()
+    sci_hdul.writeto(output_file_cube, overwrite=True)
+    sci_hdul.close()
 
 
     if full_output:
@@ -1528,16 +1678,7 @@ def make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_c
         # now save the cube
         hdu = fits.PrimaryHDU(data=cube_shifted)
         hdul = fits.HDUList([hdu])
-        header = fits.getheader(all_science[0])
-
-        for i, file in enumerate(all_science):
-            header['SCIEN{}'.format(i)] = os.path.basename(file)
-
-        header['CENTSTAR'] = os.path.basename(star_center_file)
-        header['SHIFTX'] = np.mean(center_shiftx)
-        header['SHIFTY'] = np.mean(center_shifty)
-
-        hdul[0].header = header
+        hdul[0].header = sci_header
         hdul.writeto(output_file_cube.replace('cube.fits', 'cube_basic_shift.fits'), overwrite=True)
         hdul.close()
 

@@ -145,14 +145,20 @@ def create_flux_file_wrapper(input_file, output_file, science_exp_time, L_or_R, 
     return
 
 
-def get_center_wrapper(input_file, params, center = None):
-    """ Wrapper function to get the center of the star in a file"""
+def get_center_wrapper(input_file, params, center = None) -> tuple:
+    """ Wrapper function to get the center of the star in a file
+        
+        function to extract the exact center of the star behin the coronagraph using the satellite spots, if given in the csv file, 
+        otherwise using the default positions based on the center of the frame. 
+        The function returns the shift in x and y direction that needs to be applied to center the star on the center of the frame.
+    
+    """
     return routines.get_center(input_file, params.make_plots, center = None)
 
 
-def make_the_cube_wrapper(all_science, output_file_cube, output_file_angs, shift, star_center_file, params):
+def make_the_cube_wrapper(all_science, output_file_cube, output_file_angs, shift, params):
     """ Wrapper function to create the final cube from all science files. """
-    routines.make_the_cube(all_science, output_file_cube, output_file_angs, shift, star_center_file,
+    routines.make_the_cube(all_science, output_file_cube, output_file_angs, shift,
                             params.star_name, params.obs_night, params.filter_name, params.subtract_median_science_sky_bkg,
                             params.sphere_offset, params.sphere_true_north_correction, params.sky_files_exist, params.master_sky_filepath,
                             params.image_shift_library, params.image_shift_interpolation,
